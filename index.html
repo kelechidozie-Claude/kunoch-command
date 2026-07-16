@@ -4,6 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Kunoch Command — V3</title>
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#08090D">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Kunoch">
+<link rel="apple-touch-icon" href="./icon-192.png">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
@@ -140,22 +146,30 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 
 /* AGENT OUTPUT CARDS */
 #agents-lbl{display:none}
-#out-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+#out-grid{display:grid;grid-template-columns:1fr;gap:14px;margin-bottom:14px}
 .acard{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);display:none;overflow:hidden}
 .acard.show{display:block}
 .acard-bar{height:2px}
-.acard-inner{padding:14px 16px 12px}
-.acard-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px}
-.acard-name{font-family:'DM Mono',monospace;font-size:8px;letter-spacing:2px;font-weight:500}
-.acard-role{font-size:9px;color:var(--text-muted);margin-top:2px}
+.acard-inner{padding:20px 24px 18px}
+.acard-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px}
+.acard-name{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:2px;font-weight:500}
+.acard-role{font-size:10px;color:var(--text-muted);margin-top:3px}
 .acard-badge{font-family:'DM Mono',monospace;font-size:7px;letter-spacing:1px;padding:2px 7px;border-radius:20px}
-.acard-brief{font-family:'DM Mono',monospace;font-size:8px;color:var(--text-muted);line-height:1.5;margin-bottom:10px;padding:7px 10px;background:var(--surface2);border-radius:2px;border-left:2px solid var(--border2);cursor:pointer;transition:border-color .2s}
+.acard-brief{font-family:'DM Mono',monospace;font-size:9px;color:var(--text-muted);line-height:1.6;margin-bottom:14px;padding:9px 12px;background:var(--surface2);border-radius:2px;border-left:2px solid var(--border2);cursor:pointer;transition:border-color .2s}
 .acard-brief:hover{border-left-color:var(--gold-dim)}
 .acard-brief-lbl{font-size:7px;letter-spacing:2px;margin-bottom:3px}
-.acard-brief-text{font-size:8px;color:var(--text-muted);overflow:hidden;transition:max-height .3s;max-height:30px;font-family:'DM Mono',monospace}
-.acard-brief-text.expanded{max-height:300px}
-.acard-body{font-size:11px;color:var(--text-dim);line-height:1.8;white-space:pre-wrap}
-.acard-footer{display:flex;align-items:center;justify-content:flex-end;margin-top:10px;padding-top:8px;border-top:1px solid var(--border);gap:6px}
+.acard-brief-text{font-size:9px;color:var(--text-muted);overflow:hidden;transition:max-height .3s;max-height:32px;font-family:'DM Mono',monospace}
+.acard-brief-text.expanded{max-height:400px}
+.acard-body{font-size:14px;color:var(--text);line-height:1.75;font-family:'DM Sans',sans-serif}
+.acard-body strong,.acard-body b{color:var(--gold);font-weight:600}
+.acard-body h4{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:2px;color:var(--gold);text-transform:uppercase;margin:18px 0 8px;font-weight:500}
+.acard-body h4:first-child{margin-top:0}
+.acard-body ul{margin:8px 0 8px 4px;list-style:none}
+.acard-body li{position:relative;padding-left:16px;margin-bottom:6px}
+.acard-body li::before{content:'›';position:absolute;left:2px;color:var(--gold-dim)}
+.acard-body p{margin-bottom:10px}
+.acard-body p:last-child{margin-bottom:0}
+.acard-footer{display:flex;align-items:center;justify-content:flex-end;margin-top:14px;padding-top:10px;border-top:1px solid var(--border);gap:6px}
 .copy-btn{background:none;border:1px solid var(--border);border-radius:2px;color:var(--text-muted);font-family:'DM Mono',monospace;font-size:7px;letter-spacing:2px;padding:3px 8px;cursor:pointer;transition:all .2s}
 .copy-btn:hover{border-color:var(--gold-dim);color:var(--gold)}
 .copy-btn.copied{color:var(--cfo);border-color:var(--cfo)44}
@@ -164,13 +178,24 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 .retry-btn.show{display:inline-block}
 
 /* SYNTHESIS */
-#syn-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:26px;display:none;position:relative;overflow:hidden}
+#syn-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:32px 34px;display:none;position:relative;overflow:hidden}
 #syn-card::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,var(--gold-glow) 0%,transparent 50%);pointer-events:none}
 #syn-card::after{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--gold),transparent)}
-#syn-hdr{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:18px}
-#syn-title{font-family:'Playfair Display',serif;font-size:17px;color:var(--text)}
+#syn-hdr{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:22px;position:relative}
+#syn-title{font-family:'Playfair Display',serif;font-size:21px;color:var(--text)}
 #syn-lbl{font-family:'DM Mono',monospace;font-size:7px;color:var(--gold);letter-spacing:3px;padding:3px 10px;border:1px solid var(--gold-dim);border-radius:20px}
-#syn-body{font-size:12px;color:var(--text-dim);line-height:2;white-space:pre-wrap}
+#syn-body{font-size:15px;color:var(--text);line-height:1.8;font-family:'DM Sans',sans-serif;position:relative}
+#syn-body strong,#syn-body b{color:var(--gold);font-weight:600}
+#syn-body h4{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:2px;color:var(--gold);text-transform:uppercase;margin:22px 0 10px;font-weight:500}
+#syn-body h4:first-child{margin-top:0}
+#syn-body ul{margin:10px 0 10px 4px;list-style:none}
+#syn-body li{position:relative;padding-left:18px;margin-bottom:8px}
+#syn-body li::before{content:'›';position:absolute;left:2px;color:var(--gold-dim)}
+#syn-body ol{margin:10px 0 10px 20px}
+#syn-body ol li{padding-left:4px;margin-bottom:8px}
+#syn-body ol li::before{content:none}
+#syn-body p{margin-bottom:12px}
+
 #syn-footer{display:flex;justify-content:flex-end;margin-top:14px;padding-top:10px;border-top:1px solid var(--border)}
 
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.25}}
@@ -245,6 +270,11 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 /* Business context indicator under directive */
 #biz-ctx-note{font-family:'DM Mono',monospace;font-size:7px;color:var(--gold);letter-spacing:2px;margin-top:6px;opacity:.65;display:flex;align-items:center;gap:6px}
 #biz-ctx-note::before{content:'◆';font-size:8px}
+
+/* Backup buttons */
+#backup-row{display:flex;gap:6px;padding:8px 0 0}
+.bk-btn{flex:1;background:transparent;border:1px solid var(--border);border-radius:2px;color:var(--text-muted);font-family:'DM Mono',monospace;font-size:7px;letter-spacing:2px;padding:6px 4px;cursor:pointer;transition:all .2s}
+.bk-btn:hover{border-color:var(--gold-dim);color:var(--gold)}
 </style>
 </head>
 <body>
@@ -299,6 +329,11 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
       <input id="apikey" type="password" placeholder="sk-ant-..." />
       <button id="savebtn" onclick="saveKey()">SAVE KEY</button>
       <div id="api-ok">✓ KEY ACTIVE</div>
+    </div>
+    <div id="backup-row">
+      <button class="bk-btn" onclick="exportData()">⭳ EXPORT DATA</button>
+      <button class="bk-btn" onclick="document.getElementById('importfile').click()">⭱ IMPORT</button>
+      <input type="file" id="importfile" accept=".json" style="display:none" onchange="importData(this)" />
     </div>
   </div>
 </div>
@@ -838,7 +873,7 @@ function renderBizUI(){
 }
 
 function switchBusiness(id){
-  activeBizId=id;saveActiveBiz();renderBizUI();loadHistory();closeBizMenu();
+  activeBizId=id;saveActiveBiz();renderBizUI();loadHistory();updateRunBtn();closeBizMenu();
 }
 
 function toggleBizMenu(e){
@@ -1135,6 +1170,8 @@ window.onload=function(){
   loadBusinesses();
   renderBizUI();
   loadHistory();
+  updateRunBtn();
+  if('serviceWorker' in navigator){try{navigator.serviceWorker.register('./sw.js');}catch(e){}}
 };
 function toggleApi(){document.getElementById('api-panel').classList.toggle('open');}
 function setApiOk(ok){
@@ -1187,6 +1224,20 @@ function setFredrick(st,sum,tags){
   }
 }
 
+function friendlyError(msg){
+  if(!msg)return 'Unknown error.';
+  var m=String(msg);
+  if(/rate_limit|exceeded_limit|429/i.test(m))
+    return 'Rate limit reached — your API tier allows only so many requests per minute. The app auto-retried but the limit held. Wait ~30 seconds and click RETRY, or raise your tier in console.anthropic.com (add credits to reach Tier 2 for 1,000 req/min).';
+  if(/overloaded|529/i.test(m))
+    return 'Anthropic servers are temporarily overloaded. Wait a moment and click RETRY.';
+  if(/authentication|invalid x-api-key|401/i.test(m))
+    return 'API key rejected. Check the key in the sidebar (bottom-left) is correct and active, and that billing is set up in the console.';
+  if(/credit|billing|402/i.test(m))
+    return 'Billing issue — your account may be out of credits. Add credits at console.anthropic.com → Billing.';
+  return m;
+}
+
 function showAgentCard(id,st,brief,out){
   setSba(id,st);
   var card=document.getElementById('ac-'+id);if(!card)return;
@@ -1195,9 +1246,83 @@ function showAgentCard(id,st,brief,out){
   if(badge)badge.textContent=st==='working'?'RUNNING':st==='done'?'DONE':'ERROR';
   if(brief){document.getElementById('abt-'+id).textContent=brief;lastBriefs[id]=brief;}
   if(out){
-    document.getElementById('ao-'+id).textContent=out;lastOutputs[id]=out;
+    var display=st==='error'?friendlyError(out):out;
+    document.getElementById('ao-'+id).innerHTML=mdToHtml(display);lastOutputs[id]=out;
     var rb=document.getElementById('ar-'+id);if(rb)rb.className='retry-btn'+(st==='error'?' show':'');
   }
+}
+
+/* ── BACKUP: EXPORT / IMPORT ─────────────────── */
+function exportData(){
+  var data={
+    v:3,exported:new Date().toISOString(),
+    businesses:JSON.parse(localStorage.getItem('kc_businesses')||'[]'),
+    active:localStorage.getItem('kc_active_biz')||'',
+    history:JSON.parse(localStorage.getItem('kc_history_v3')||'{}')
+    /* API key deliberately excluded — never put credentials in a backup file */
+  };
+  var blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='kunoch-backup-'+new Date().toISOString().slice(0,10)+'.json';
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  setTimeout(function(){URL.revokeObjectURL(a.href);},5000);
+}
+function importData(input){
+  var f=input.files&&input.files[0];if(!f)return;
+  var reader=new FileReader();
+  reader.onload=function(){
+    try{
+      var data=JSON.parse(reader.result);
+      if(!data.businesses||!Array.isArray(data.businesses))throw new Error('Not a Kunoch backup file');
+      if(!confirm('Import backup from '+(data.exported||'unknown date')+'? This REPLACES current businesses and history on this device.'))return;
+      localStorage.setItem('kc_businesses',JSON.stringify(data.businesses));
+      if(data.active)localStorage.setItem('kc_active_biz',data.active);
+      localStorage.setItem('kc_history_v3',JSON.stringify(data.history||{}));
+      loadBusinesses();renderBizUI();loadHistory();
+      showErr('Backup imported — '+data.businesses.length+' businesses restored.');
+    }catch(e){showErr('Import failed: '+e.message);}
+    input.value='';
+  };
+  reader.readAsText(f);
+}
+
+/* Run button shows the active business — scope is in your click path */
+function updateRunBtn(){
+  var b=getActiveBiz();
+  var btn=document.getElementById('runbtn');
+  if(btn&&!btn.disabled)btn.textContent='▶ ISSUE — '+((b&&b.name)||'').toUpperCase();
+}
+
+/* ── LIGHTWEIGHT MARKDOWN → HTML (safe) ──────── */
+function mdToHtml(src){
+  if(!src)return '';
+  var s=src.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  var lines=s.split('\n');
+  var html='',inUl=false,inOl=false;
+  function closeLists(){if(inUl){html+='</ul>';inUl=false;}if(inOl){html+='</ol>';inOl=false;}}
+  function inline(x){
+    return x
+      .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+      .replace(/__(.+?)__/g,'<strong>$1</strong>')
+      .replace(/(^|[^*])\*([^*]+?)\*(?!\*)/g,'$1<em>$2</em>');
+  }
+  for(var i=0;i<lines.length;i++){
+    var t=lines[i].trim();
+    if(!t){closeLists();continue;}
+    var hMatch=t.match(/^#{1,6}\s+(.*)$/);
+    var boldOnly=t.match(/^\*\*(.+?)\*\*:?$/);
+    if(hMatch){closeLists();html+='<h4>'+inline(hMatch[1])+'</h4>';continue;}
+    if(boldOnly){closeLists();html+='<h4>'+inline(boldOnly[1])+'</h4>';continue;}
+    var olMatch=t.match(/^(\d+)[\.\)]\s+(.*)$/);
+    if(olMatch){if(!inOl){closeLists();html+='<ol>';inOl=true;}html+='<li>'+inline(olMatch[2])+'</li>';continue;}
+    var ulMatch=t.match(/^[-•*]\s+(.*)$/);
+    if(ulMatch){if(!inUl){closeLists();html+='<ul>';inUl=true;}html+='<li>'+inline(ulMatch[1])+'</li>';continue;}
+    closeLists();
+    html+='<p>'+inline(t)+'</p>';
+  }
+  closeLists();
+  return html;
 }
 
 function toggleBrief(id){
@@ -1222,16 +1347,29 @@ function copySyn(){
 }
 
 /* ── API CALL WITH RETRY ──────────────────────────── */
-function callAPI(system,content,attempt){
+/* Model strategy: frontier model for orchestration + synthesis, fast model for specialist fan-out */
+var MODELS={orchestrator:'claude-fable-5',specialist:'claude-sonnet-4-6'};
+var TOKENS={plan:2048,specialist:4096,synthesis:8192};
+
+function callAPI(system,content,attempt,model,maxTok){
   attempt=attempt||1;
+  model=model||MODELS.specialist;
+  maxTok=maxTok||TOKENS.specialist;
   var key=getKey();if(!key)return Promise.reject(new Error('No API key — open the sidebar'));
   return fetch('https://api.anthropic.com/v1/messages',{
     method:'POST',
     headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-    body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:2048,system:system,messages:[{role:'user',content:content}]})
+    body:JSON.stringify({model:model,max_tokens:maxTok,system:system,messages:[{role:'user',content:content}]})
   }).then(function(r){
-    if((r.status===529||r.status===500||r.status===503)&&attempt<3){
-      return new Promise(function(res){setTimeout(function(){res(callAPI(system,content,attempt+1));},2000*attempt);});
+    // 429 = rate limit. Honor retry-after header if present, else exponential backoff. Up to 5 tries.
+    if(r.status===429&&attempt<6){
+      var ra=parseFloat(r.headers.get('retry-after'));
+      var waitMs=(!isNaN(ra)&&ra>0)?(ra*1000+250):Math.min(1500*Math.pow(1.7,attempt-1),12000);
+      return new Promise(function(res){setTimeout(function(){res(callAPI(system,content,attempt+1,model,maxTok));},waitMs);});
+    }
+    // transient server errors
+    if((r.status===529||r.status===500||r.status===503)&&attempt<5){
+      return new Promise(function(res){setTimeout(function(){res(callAPI(system,content,attempt+1,model,maxTok));},Math.min(2000*attempt,10000));});
     }
     if(!r.ok)return r.text().then(function(t){throw new Error(t.slice(0,300));});
     return r.json();
@@ -1251,12 +1389,12 @@ function retryAgent(id){
   showAgentCard(id,'working',lastBriefs[id]||'',null);
   callAPI(SP[id],buildContent(currentPlan.briefs[id]))
     .then(function(o){showAgentCard(id,'done',null,o);})
-    .catch(function(e){showAgentCard(id,'error',null,'RETRY FAILED: '+e.message);});
+    .catch(function(e){showAgentCard(id,'error',null,e.message);});
 }
 
 /* ── MAIN RUN ─────────────────────────────────────── */
 function doneState(ok){
-  document.getElementById('runbtn').disabled=false;document.getElementById('runbtn').textContent='▶ ISSUE DIRECTIVE';
+  document.getElementById('runbtn').disabled=false;updateRunBtn();
   if(ok){document.getElementById('rstbtn').style.display='inline-block';document.getElementById('pdfbtn').style.display='inline-block';}
   running=false;
 }
@@ -1295,7 +1433,7 @@ function go(){
     manualSel.forEach(function(id){manualBriefs[id]='Analyse the task: '+task+(docNote?docNote:'');});
     var fakePlan={task_summary:task.slice(0,80)+(task.length>80?'...':''),agents_selected:manualSel,briefs:manualBriefs};
     // Still run Fredrick to get a task summary and proper briefs
-    callAPI(SP.fredrick,buildContent(task+docNote)).then(function(raw){
+    callAPI(SP.fredrick,buildContent(task+docNote),1,MODELS.orchestrator,TOKENS.plan).then(function(raw){
       try{
         var fp=extractJSON(raw);
         // Use Fredrick's summary but override agent selection
@@ -1306,7 +1444,7 @@ function go(){
       runWithPlan(fakePlan,task,docNote);
     }).catch(function(){runWithPlan(fakePlan,task,docNote);});
   } else {
-    callAPI(SP.fredrick,buildContent(task+docNote)).then(function(raw){
+    callAPI(SP.fredrick,buildContent(task+docNote),1,MODELS.orchestrator,TOKENS.plan).then(function(raw){
       var plan;
       try{plan=extractJSON(raw);}
       catch(e){setFredrick('error','Could not parse Fredrick: '+e.message,[]);showErr(e.message);doneState(false);return;}
@@ -1323,13 +1461,20 @@ function runWithPlan(plan,task,docNote){
 
   var ids=plan.agents_selected||[];
   var outputs={};
-  var promises=ids.map(function(id){
+  // Stagger launches ~600ms apart so all specialists don't hit the API in the same instant
+  // (avoids tripping per-minute rate limits on lower tiers). Each still runs concurrently once launched.
+  var promises=ids.map(function(id,i){
     var brief=plan.briefs&&plan.briefs[id];
     if(!brief||!SP[id])return Promise.resolve();
     showAgentCard(id,'working',brief,null);
-    return callAPI(SP[id],buildContent(brief))
-      .then(function(o){outputs[id]=o;showAgentCard(id,'done',null,o);})
-      .catch(function(e){outputs[id]='Agent failed: '+e.message;showAgentCard(id,'error',null,outputs[id]);});
+    return new Promise(function(resolve){
+      setTimeout(function(){
+        callAPI(SP[id],buildContent(brief))
+          .then(function(o){outputs[id]=o;showAgentCard(id,'done',null,o);})
+          .catch(function(e){outputs[id]='Agent failed: '+e.message;showAgentCard(id,'error',null,outputs[id]);})
+          .then(resolve);
+      },i*600);
+    });
   });
 
   Promise.all(promises).then(function(){
@@ -1340,9 +1485,9 @@ function runWithPlan(plan,task,docNote){
     var si='DIRECTIVE: '+task+'\n\n'+Object.keys(outputs).map(function(id){return'=== '+(AN[id]||id).toUpperCase()+' ===\n'+outputs[id];}).join('\n\n');
     var biz=getActiveBiz();
     var synInput=biz?formatBizContext(biz)+'\n\n'+si:si;
-    callAPI(SP.synthesis,synInput).then(function(o){
+    callAPI(SP.synthesis,synInput,1,MODELS.orchestrator,TOKENS.synthesis).then(function(o){
       lastSynthesis=o;
-      document.getElementById('syn-body').textContent=o;
+      document.getElementById('syn-body').innerHTML=mdToHtml(o);
       document.getElementById('syn-card').style.display='block';
       document.getElementById('syn-card').classList.add('fade-in');
       document.getElementById('syn-card').scrollIntoView({behavior:'smooth',block:'start'});
@@ -1353,15 +1498,30 @@ function runWithPlan(plan,task,docNote){
   });
 }
 
-/* ── HISTORY (per business, localStorage) ─────── */
+/* ── HISTORY (per business, full runs, localStorage) ─────── */
 function saveToHistory(task,summary){
   if(!activeBizId)return;
   var all=JSON.parse(localStorage.getItem('kc_history_v3')||'{}');
   var hist=all[activeBizId]||[];
-  hist.unshift({task:task,summary:summary,time:new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}),date:new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short'})});
-  if(hist.length>10)hist=hist.slice(0,10);
+  hist.unshift({
+    id:'run_'+Date.now().toString(36),
+    task:task,summary:summary,
+    agents:lastAgents.slice(),briefs:JSON.parse(JSON.stringify(lastBriefs)),
+    outputs:JSON.parse(JSON.stringify(lastOutputs)),synthesis:lastSynthesis,
+    time:new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}),
+    date:new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short'})
+  });
+  if(hist.length>8)hist=hist.slice(0,8);
   all[activeBizId]=hist;
-  localStorage.setItem('kc_history_v3',JSON.stringify(all));
+  // quota-safe write: drop oldest runs across businesses until it fits
+  for(var tries=0;tries<6;tries++){
+    try{localStorage.setItem('kc_history_v3',JSON.stringify(all));break;}
+    catch(e){
+      var trimmed=false;
+      Object.keys(all).forEach(function(b){if(all[b].length>2){all[b]=all[b].slice(0,all[b].length-1);trimmed=true;}});
+      if(!trimmed){showErr('History storage full — use EXPORT DATA to back up, then history will recycle.');break;}
+    }
+  }
   loadHistory();
 }
 function loadHistory(){
@@ -1370,14 +1530,39 @@ function loadHistory(){
   var el=document.getElementById('sb-history');
   if(!hist.length){el.innerHTML='<div class="hist-empty">NO HISTORY YET</div>';return;}
   el.innerHTML='';
-  hist.forEach(function(h){
+  hist.forEach(function(h,idx){
     var d=document.createElement('div');d.className='hist-item';
     var meta=(h.date?h.date+' · ':'')+h.time+' · '+escHtml((h.summary||'').slice(0,40));
     d.innerHTML='<div class="hist-task">'+escHtml(h.task.slice(0,60))+(h.task.length>60?'…':'')+'</div>'
-      +'<div class="hist-meta">'+meta+'</div>';
-    d.onclick=function(){document.getElementById('task').value=h.task;document.getElementById('task').focus();};
+      +'<div class="hist-meta">'+meta+(h.outputs?' · <span style="color:var(--gold)">OPEN ▸</span>':'')+'</div>';
+    d.onclick=function(){
+      if(h.outputs){openRun(h);}
+      else{document.getElementById('task').value=h.task;document.getElementById('task').focus();}
+    };
     el.appendChild(d);
   });
+}
+/* Reopen a saved run read-only: restores Fredrick card, agent outputs, synthesis, and enables PDF export */
+function openRun(h){
+  resetAll();
+  document.getElementById('task').value=h.task;
+  lastTask=h.task;lastSummary=h.summary;lastAgents=h.agents||[];
+  lastBriefs=h.briefs||{};lastOutputs=h.outputs||{};lastSynthesis=h.synthesis||'';
+  currentPlan={briefs:lastBriefs,agents_selected:lastAgents,task_summary:lastSummary};
+  setFredrick('done',h.summary,lastAgents);
+  document.getElementById('agents-lbl').style.display='block';
+  lastAgents.forEach(function(id){
+    if(lastOutputs[id])showAgentCard(id,'done',lastBriefs[id]||'',lastOutputs[id]);
+  });
+  if(lastSynthesis){
+    document.getElementById('syn-body').innerHTML=mdToHtml(lastSynthesis);
+    document.getElementById('syn-card').style.display='block';
+  }
+  document.getElementById('results').style.display='block';
+  document.getElementById('rstbtn').style.display='inline-block';
+  document.getElementById('pdfbtn').style.display='inline-block';
+  setPhase('ARCHIVED RUN · '+(h.date||'')+' '+(h.time||''),'var(--board)');
+  document.getElementById('results').scrollIntoView({behavior:'smooth',block:'start'});
 }
 
 /* ── PDF EXPORT ───────────────────────────────────── */
@@ -1385,52 +1570,101 @@ function downloadPDF(){
   var now=new Date();
   var ds=now.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
   var ts=now.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+  var bizName=(getActiveBiz()&&getActiveBiz().name)||'';
   var agSec='';
   lastAgents.forEach(function(id){
     if(!lastOutputs[id])return;
     var c=ACOLS_PDF[id]||'#555';
-    agSec+='<div style="border-left:4px solid '+c+';padding:14px 18px;margin-bottom:16px;page-break-inside:avoid">';
-    agSec+='<div style="font-family:\'DM Mono\',monospace;font-size:9pt;font-weight:500;letter-spacing:2px;color:#1a1a1a;margin-bottom:2px">'+(AN[id]||id).toUpperCase()+'</div>';
-    if(lastBriefs[id])agSec+='<div style="font-family:\'DM Mono\',monospace;font-size:7.5pt;color:#aaa;background:#f5f5f5;padding:6px 10px;border-radius:2px;margin-bottom:8px">BRIEF: '+escHtml(lastBriefs[id])+'</div>';
-    agSec+='<div style="font-size:10.5pt;color:#222;line-height:1.75;white-space:pre-wrap">'+escHtml(lastOutputs[id])+'</div></div>';
+    agSec+='<section class="agent">';
+    agSec+='<div class="agent-hd" style="border-color:'+c+'"><span class="agent-dot" style="background:'+c+'"></span>'+(AN[id]||id).toUpperCase()+'</div>';
+    agSec+='<div class="agent-body">'+mdToHtml(lastOutputs[id])+'</div>';
+    agSec+='</section>';
   });
-  var docNote=uploadedDocs.length?'<div style="font-family:\'DM Mono\',monospace;font-size:8pt;color:#3a7a9a;margin-top:5px">FILES: '+uploadedDocs.map(function(d){return escHtml(d.name);}).join(' · ')+'</div>':'';
-  var modeNote='<div style="font-family:\'DM Mono\',monospace;font-size:7.5pt;color:#aaa;margin-top:4px">AGENT SELECTION: '+(selMode==='manual'?'MANUAL OVERRIDE':'AUTO — FREDRICK')+'</div>';
-  var h='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Kunoch Command</title>'
-    +'<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400&display=swap" rel="stylesheet">'
-    +'<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:"DM Sans",sans-serif;color:#1a1a1a;background:#fff;padding:48px 56px;font-size:11pt;line-height:1.7}'
-    +'.logo{font-family:"Playfair Display",serif;font-size:22pt;color:#9A7830}.sub{font-family:"DM Mono",monospace;font-size:7.5pt;color:#999;letter-spacing:3px;margin-top:4px}'
-    +'.hdr{border-bottom:2px solid #9A7830;padding-bottom:18px;margin-bottom:26px}'
-    +'.meta{margin-top:14px;padding:12px 16px;background:#fdf9f0;border-left:4px solid #9A7830}'
-    +'.ml{font-family:"DM Mono",monospace;font-size:7.5pt;color:#9A7830;letter-spacing:2px;margin-bottom:4px}'
-    +'.sl{font-family:"DM Mono",monospace;font-size:7.5pt;color:#bbb;letter-spacing:3px;border-bottom:1px solid #eee;padding-bottom:5px;margin:24px 0 14px}'
-    +'.sumbox{background:#f9f9f9;border:1px solid #eee;padding:12px 16px;font-style:italic;color:#444;margin-bottom:8px}'
-    +'.tag{font-family:"DM Mono",monospace;font-size:7pt;padding:2px 10px;border:1px solid #9A7830;color:#9A7830;margin-right:6px;display:inline-block}'
-    +'.synbox{border:2px solid #1a1a1a;padding:22px 26px}'
-    +'.footer{margin-top:36px;border-top:1px solid #eee;padding-top:10px;font-family:"DM Mono",monospace;font-size:7.5pt;color:#ccc}'
-    +'@media print{body{padding:0}@page{margin:20mm 18mm}}</style></head><body>';
-  h+='<div class="hdr"><div class="logo">Kunoch Command</div><div class="sub">FAMILY OFFICE · EXECUTIVE INTELLIGENCE · CONFIDENTIAL</div>'
-    +'<div class="meta"><div class="ml">DIRECTIVE</div><div style="font-size:11pt;color:#222;font-style:italic">'+escHtml(lastTask)+'</div>'+docNote+modeNote+'<div style="font-family:\'DM Mono\',monospace;font-size:7.5pt;color:#bbb;margin-top:5px">'+ds+' · '+ts+'</div></div></div>';
-  h+='<div class="sl">TASK SUMMARY — FREDRICK</div><div class="sumbox">'+escHtml(lastSummary)+'</div>';
-  h+='<div style="margin-top:8px">'+lastAgents.map(function(id){return'<span class="tag">'+(AN[id]||id).toUpperCase()+'</span>';}).join('')+'</div>';
-  h+='<div class="sl">SPECIALIST OUTPUTS</div>'+agSec;
-  h+='<div class="sl">EXECUTIVE BRIEFING</div><div class="synbox"><div style="font-family:\'Playfair Display\',serif;font-size:15pt;margin-bottom:14px">Fredrick\'s Executive Briefing</div><div style="font-size:11pt;line-height:1.9;white-space:pre-wrap">'+escHtml(lastSynthesis)+'</div></div>';
-  h+='<div class="footer">KUNOCH COMMAND · CONFIDENTIAL · '+ds.toUpperCase()+'</div></body></html>';
+  var docNote=uploadedDocs.length?'<div class="meta-line">ATTACHMENTS: '+uploadedDocs.map(function(d){return escHtml(d.name);}).join(' · ')+'</div>':'';
+  var modeNote='AGENT SELECTION: '+(selMode==='manual'?'MANUAL OVERRIDE':'AUTO · FREDRICK ORCHESTRATION');
+  var tags=lastAgents.map(function(id){return'<span class="tag">'+(AN[id]||id).toUpperCase()+'</span>';}).join('');
+
+  var h='<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Kunoch Command — '+escHtml(bizName||'Briefing')+'</title>'
+    +'<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">'
+    +'<style>'
+    +'*{margin:0;padding:0;box-sizing:border-box}'
+    +'body{font-family:"DM Sans",sans-serif;color:#23272F;background:#fff;font-size:10.5pt;line-height:1.65;-webkit-print-color-adjust:exact;print-color-adjust:exact}'
+    +'.page{padding:0}'
+    /* letterhead */
+    +'.lh{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2.5px solid #9A7830;padding-bottom:16px;margin-bottom:22px}'
+    +'.lh-l .logo{font-family:"Playfair Display",serif;font-size:26pt;color:#9A7830;line-height:1;font-weight:700}'
+    +'.lh-l .sub{font-family:"DM Mono",monospace;font-size:6.5pt;color:#9AA0AB;letter-spacing:3.5px;margin-top:6px}'
+    +'.lh-r{text-align:right;font-family:"DM Mono",monospace;font-size:7pt;color:#9AA0AB;letter-spacing:1.5px;line-height:1.8}'
+    +'.lh-r .biz{color:#9A7830;font-size:9pt;font-weight:500;letter-spacing:2px}'
+    /* directive block */
+    +'.directive{background:#FBF8F1;border:1px solid #ECE3CE;border-left:3px solid #9A7830;padding:16px 20px;margin-bottom:8px;border-radius:3px}'
+    +'.directive .lbl{font-family:"DM Mono",monospace;font-size:7pt;color:#9A7830;letter-spacing:3px;margin-bottom:7px}'
+    +'.directive .txt{font-size:13pt;color:#1A1D24;font-family:"Playfair Display",serif;line-height:1.4}'
+    +'.meta-line{font-family:"DM Mono",monospace;font-size:7pt;color:#9AA0AB;letter-spacing:1px;margin-top:9px}'
+    /* section labels */
+    +'.sec{font-family:"DM Mono",monospace;font-size:7.5pt;color:#9A7830;letter-spacing:3.5px;border-bottom:1px solid #EAEAEA;padding-bottom:6px;margin:30px 0 16px;font-weight:500}'
+    /* task summary */
+    +'.summary{background:#F7F8FA;border:1px solid #EDEFF2;padding:14px 18px;border-radius:3px;font-style:italic;color:#3A3F48;font-size:11pt;line-height:1.5}'
+    +'.tags{margin-top:12px}'
+    +'.tag{font-family:"DM Mono",monospace;font-size:6.5pt;letter-spacing:1.5px;padding:3px 11px;border:1px solid #D8C9A0;color:#9A7830;border-radius:20px;margin-right:6px;display:inline-block}'
+    /* agent sections */
+    +'.agent{margin-bottom:22px;page-break-inside:avoid;border:1px solid #EDEFF2;border-radius:4px;overflow:hidden}'
+    +'.agent-hd{font-family:"DM Mono",monospace;font-size:9pt;font-weight:500;letter-spacing:2.5px;color:#1A1D24;padding:11px 18px;background:#FAFBFC;border-left:4px solid #9A7830;display:flex;align-items:center;gap:9px}'
+    +'.agent-dot{width:7px;height:7px;border-radius:50%;display:inline-block}'
+    +'.agent-body{padding:16px 20px 18px}'
+    /* rendered markdown */
+    +'.agent-body h4,.synbox h4{font-family:"DM Mono",monospace;font-size:8.5pt;letter-spacing:1.5px;color:#9A7830;text-transform:uppercase;margin:15px 0 7px;font-weight:600}'
+    +'.agent-body h4:first-child,.synbox h4:first-child{margin-top:0}'
+    +'.agent-body p,.synbox p{margin-bottom:9px;color:#2A2E36}'
+    +'.agent-body strong,.synbox strong{color:#1A1D24;font-weight:600}'
+    +'.agent-body ul,.synbox ul{margin:7px 0 9px 2px;list-style:none}'
+    +'.agent-body ol,.synbox ol{margin:7px 0 9px 20px}'
+    +'.agent-body li,.synbox li{margin-bottom:5px;color:#2A2E36}'
+    +'.agent-body ul li{position:relative;padding-left:15px}'
+    +'.agent-body ul li::before,.synbox ul li::before{content:"›";position:absolute;left:2px;color:#9A7830;font-weight:600}'
+    +'.synbox ul li{position:relative;padding-left:15px}'
+    /* executive briefing */
+    +'.synwrap{page-break-inside:avoid}'
+    +'.synbox{border:1.5px solid #1A1D24;border-radius:4px;padding:24px 28px;background:#fff}'
+    +'.synbox .syn-ttl{font-family:"Playfair Display",serif;font-size:16pt;color:#1A1D24;margin-bottom:16px;font-weight:600;border-bottom:1px solid #EAEAEA;padding-bottom:10px}'
+    /* footer */
+    +'.footer{margin-top:30px;border-top:1px solid #EAEAEA;padding-top:10px;font-family:"DM Mono",monospace;font-size:6.5pt;color:#BFC4CC;letter-spacing:1.5px;display:flex;justify-content:space-between}'
+    +'@page{margin:18mm 16mm}'
+    +'@media print{body{padding:0}.agent,.synwrap{page-break-inside:avoid}}'
+    +'</style></head><body><div class="page">';
+  // letterhead
+  h+='<div class="lh"><div class="lh-l"><div class="logo">Kunoch Command</div>'
+    +'<div class="sub">FAMILY OFFICE · EXECUTIVE INTELLIGENCE · CONFIDENTIAL</div></div>'
+    +'<div class="lh-r">'+(bizName?'<div class="biz">'+escHtml(bizName.toUpperCase())+'</div>':'')
+    +'<div>'+ds+'</div><div>'+ts+'</div></div></div>';
+  // directive
+  h+='<div class="directive"><div class="lbl">DIRECTIVE</div><div class="txt">'+escHtml(lastTask)+'</div>'
+    +docNote+'<div class="meta-line">'+modeNote+'</div></div>';
+  // task summary
+  h+='<div class="sec">TASK SUMMARY · FREDRICK</div><div class="summary">'+escHtml(lastSummary)+'</div>'
+    +'<div class="tags">'+tags+'</div>';
+  // specialist outputs
+  h+='<div class="sec">SPECIALIST OUTPUTS</div>'+agSec;
+  // executive briefing
+  h+='<div class="synwrap"><div class="sec">EXECUTIVE BRIEFING</div>'
+    +'<div class="synbox"><div class="syn-ttl">Fredrick\u2019s Executive Briefing</div>'
+    +mdToHtml(lastSynthesis)+'</div></div>';
+  h+='<div class="footer"><span>KUNOCH COMMAND · CONFIDENTIAL</span><span>'+escHtml(bizName.toUpperCase())+'</span></div>';
+  h+='</div></body></html>';
+
   var w=window.open('','_blank','width=900,height=700');
   if(w&&w.document){
-    w.document.write(h);w.document.close();w.onload=function(){w.focus();w.print();};
+    w.document.write(h);w.document.close();w.onload=function(){w.focus();setTimeout(function(){w.print();},400);};
   }else{
-    // Popup blocked — fall back to Blob URL in new tab, user triggers print with Ctrl/Cmd+P
     var blob=new Blob([h],{type:'text/html'});
     var url=URL.createObjectURL(blob);
     var w2=window.open(url,'_blank');
     if(!w2){
-      // Second popup also blocked — offer download instead
       var a=document.createElement('a');
-      a.href=url;a.download='Kunoch_Command_'+new Date().toISOString().slice(0,10)+'.html';
+      a.href=url;a.download='Kunoch_Command_'+(bizName||'Briefing').replace(/\s+/g,'_')+'_'+now.toISOString().slice(0,10)+'.html';
       document.body.appendChild(a);a.click();document.body.removeChild(a);
       setTimeout(function(){URL.revokeObjectURL(url);},10000);
-      showErr('Popups are blocked. The briefing was downloaded as an HTML file — open it and press ⌘/Ctrl+P to save as PDF.');
+      showErr('Popups are blocked. The briefing was downloaded as an HTML file — open it and press ⌘/Ctrl+P → Save as PDF. Tip: in the print dialog, turn OFF "Headers and footers" for a clean document.');
     }else{
       setTimeout(function(){URL.revokeObjectURL(url);},60000);
     }
