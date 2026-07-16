@@ -226,6 +226,59 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 #followup-btn{margin-top:10px;background:transparent;border:1px solid var(--gold-dim);border-radius:var(--r);color:var(--gold);font-family:'DM Mono',monospace;font-size:9px;letter-spacing:2px;padding:10px 18px;cursor:pointer;transition:all .2s}
 #followup-btn:hover:not(:disabled){background:var(--gold-glow);border-color:var(--gold)}
 #followup-btn:disabled{opacity:.5;cursor:default}
+/* ── VIEW TABS + MEETING INTELLIGENCE ─────────── */
+#view-tabs{display:flex;gap:8px;margin-bottom:22px}
+.vtab{background:transparent;border:1px solid var(--border);border-radius:2px;color:var(--text-muted);font-family:'DM Mono',monospace;font-size:9px;letter-spacing:2px;padding:9px 18px;cursor:pointer;transition:all .2s}
+.vtab:hover{border-color:var(--gold-dim);color:var(--gold)}
+.vtab.active{background:var(--gold-glow);border-color:var(--gold-dim);color:var(--gold)}
+#meetings-view{display:none}
+#mtg-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:12px}
+#mtg-biz{color:var(--gold)}
+#mtg-review-btn{white-space:nowrap}
+#mtg-gate{display:none;background:var(--surface);border:1px solid var(--border);border-left:2px solid var(--gold);border-radius:var(--r);padding:16px 18px;color:var(--text-dim);font-size:12px;line-height:1.7}
+.mtg-prov{display:flex;align-items:center;gap:8px;font-family:'DM Mono',monospace;font-size:8px;letter-spacing:1.5px;color:var(--text-muted);margin-bottom:12px}
+.prov-btn{background:transparent;border:1px solid var(--border);border-radius:2px;color:var(--text-muted);font-family:'DM Mono',monospace;font-size:8px;letter-spacing:1.5px;padding:5px 11px;cursor:pointer;transition:all .2s}
+.prov-btn.active{background:var(--gold-glow);border-color:var(--gold-dim);color:var(--gold)}
+#mtg-dropzone{position:relative;border:1.5px dashed var(--border2);border-radius:var(--r);padding:26px 20px;text-align:center;cursor:pointer;transition:all .25s;background:var(--surface)}
+#mtg-dropzone:hover,#mtg-dropzone.drag{border-color:var(--gold-dim);background:var(--surface2)}
+#mtg-dropzone input{position:absolute;inset:0;opacity:0;cursor:pointer}
+#mtg-dz-icon{font-size:20px;color:var(--gold-dim);margin-bottom:6px}
+#mtg-dz-title{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:2px;color:var(--text-dim);margin-bottom:5px}
+#mtg-dz-sub{font-family:'DM Mono',monospace;font-size:7.5px;letter-spacing:1px;color:var(--text-muted);line-height:1.6}
+#mtg-status{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;color:var(--gold);margin-top:10px;display:none}
+#mtg-review-card{display:none;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:24px 26px;margin-top:20px;position:relative;overflow:hidden}
+#mtg-review-card::after{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--gold),transparent)}
+.mrv-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.mrv-ttl{font-family:'Playfair Display',serif;font-size:18px;color:var(--text)}
+.mrv-lbl{font-family:'DM Mono',monospace;font-size:7px;color:var(--gold);letter-spacing:2px;border:1px solid var(--gold-dim);border-radius:20px;padding:3px 10px}
+.mrv-body{font-size:14px;color:var(--text);line-height:1.75}
+.mrv-body strong{color:var(--gold)}
+.mrv-body h4{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:2px;color:var(--gold);text-transform:uppercase;margin:16px 0 8px}
+.mrv-body h4:first-child{margin-top:0}
+.mrv-body ul{margin:8px 0 8px 4px;list-style:none}
+.mrv-body li{position:relative;padding-left:16px;margin-bottom:6px}
+.mrv-body ul li::before{content:'›';position:absolute;left:2px;color:var(--gold-dim)}
+.mrv-body ol{margin:8px 0 8px 20px}.mrv-body p{margin-bottom:10px}
+#mtg-list{margin-top:22px;display:flex;flex-direction:column;gap:14px}
+.mtg-empty{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--text-muted);padding:20px 0;text-align:center}
+.mcard{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.mcard-bar{height:2px;background:linear-gradient(90deg,var(--gold),transparent)}
+.mcard-inner{padding:18px 20px}
+.mcard-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px}
+.mcard-plat{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:1.5px;color:var(--gold)}
+.mcard-meta{font-family:'DM Mono',monospace;font-size:7.5px;letter-spacing:1px;color:var(--text-muted);margin-top:4px;line-height:1.6}
+.mcard-prov{font-family:'DM Mono',monospace;font-size:6.5px;letter-spacing:1.5px;padding:3px 8px;border-radius:20px;border:1px solid var(--border2);color:var(--text-muted);white-space:nowrap;flex-shrink:0}
+.mcard-prov.own{color:var(--cfo);border-color:var(--cfo)44}
+.mcard-sum{font-size:13px;color:var(--text-dim);line-height:1.7;margin-bottom:12px;font-style:italic}
+.mcard-sec{font-family:'DM Mono',monospace;font-size:8px;letter-spacing:1.5px;color:var(--gold-dim);margin:12px 0 6px}
+.mcard ul{list-style:none;margin:0}
+.mcard li{position:relative;padding-left:15px;margin-bottom:5px;font-size:12.5px;color:var(--text);line-height:1.55}
+.mcard li::before{content:'›';position:absolute;left:0;color:var(--gold-dim)}
+.mcard .ai-owner{color:var(--gold);font-weight:500}
+.mcard .ai-due{color:var(--ppp);font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;margin-left:6px}
+.mcard-flag li::before{content:'⚑';color:var(--legal)}
+.mcard-foot{display:flex;justify-content:space-between;align-items:center;margin-top:14px;padding-top:10px;border-top:1px solid var(--border)}
+.mcard-hash{font-family:'DM Mono',monospace;font-size:6.5px;letter-spacing:1px;color:var(--text-muted)}
 
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.25}}
 @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
@@ -398,6 +451,12 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
   </div>
 
   <div id="work">
+    <!-- VIEW TABS -->
+    <div id="view-tabs">
+      <button class="vtab active" id="vtab-command" onclick="switchView('command')">◆ COMMAND</button>
+      <button class="vtab" id="vtab-meetings" onclick="switchView('meetings')">◆ MEETINGS</button>
+    </div>
+    <div id="command-view">
     <!-- UPLOAD -->
     <div id="upload-sec">
       <div class="sec-lbl">DOCUMENTS FOR ANALYSIS <span style="color:var(--border2)">(OPTIONAL)</span></div>
@@ -525,6 +584,31 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
           <button id="followup-btn" onclick="askFollowUp()">↳ ASK FOLLOW-UP</button>
         </div>
       </div>
+    </div>
+    </div><!-- /command-view -->
+
+    <!-- ── MEETINGS VIEW ────────────────────────── -->
+    <div id="meetings-view">
+      <div id="mtg-head">
+        <div class="sec-lbl">MEETING INTELLIGENCE — <span id="mtg-biz">—</span></div>
+        <button class="sbtn" id="mtg-review-btn" onclick="weeklyReview()">◷ WEEKLY REVIEW</button>
+      </div>
+      <div id="mtg-gate">Sign in (sidebar → SYNC) to use meeting intelligence. Transcripts and notes are stored securely in your Supabase workspace, scoped to your account — with an original + SHA-256 + provenance recorded in the audit log.</div>
+      <div id="mtg-intake">
+        <div class="mtg-prov">PROVENANCE:
+          <button class="prov-btn active" id="prov-own" onclick="setProv('own_transcript')">OWN TRANSCRIPT</button>
+          <button class="prov-btn" id="prov-notes" onclick="setProv('imported_notes')">IMPORTED NOTES</button>
+        </div>
+        <div id="mtg-dropzone" ondragover="mtgOver(event)" ondragleave="mtgLeave()" ondrop="mtgDrop(event)">
+          <input type="file" id="mtg-fileinput" multiple accept=".vtt,.srt,.txt,.md,.csv,.docx,.doc,.pdf,.xlsx,.xls,.pptx,.png,.jpg,.jpeg,.webp,.gif" onchange="mtgFilesChosen(this.files)" />
+          <div id="mtg-dz-icon">⬆</div>
+          <div id="mtg-dz-title">DROP TRANSCRIPT OR NOTES</div>
+          <div id="mtg-dz-sub">VTT · SRT · TXT · Word · PDF · Excel · notes / images — Fredrick normalises into a structured, searchable record</div>
+        </div>
+        <div id="mtg-status"></div>
+      </div>
+      <div id="mtg-review-card"></div>
+      <div id="mtg-list"></div>
     </div>
   </div>
 </div>
@@ -889,6 +973,38 @@ synthesisFollow:[
   "[One concrete, time-bound action.]",
   "",
   "Max 220 words. Board-level tone. No filler."
+].join("\n"),
+
+meetingNormalize:[
+  "You are Fredrick, Chief of Staff to Kelechi Dozie.",CTX,
+  "You are given a meeting transcript or a set of meeting notes for ONE active business (its profile is prepended). The provenance is stated in the instruction.",
+  "Extract a precise, faithful canonical record. Do NOT invent details that are not present in the source — use null or empty arrays where unknown. Attribute action items to the named owner; capture explicit due dates only.",
+  "Respond ONLY in raw JSON (no markdown fences), matching exactly:",
+  '{"meeting_date":"YYYY-MM-DD or null","platform":"Zoom | Google Meet | Teams | Zoho | In-person | Unknown","attendees":["name (role if known)"],"agenda":"one-line agenda or null","decisions":["decision made"],"action_items":[{"owner":"name","task":"what they will do","due":"YYYY-MM-DD or null"}],"open_questions":["unresolved question"],"flags":["risk, tension or issue to watch"],"summary":"3-4 sentence board-level summary grounded in this business"}'
+].join("\n"),
+
+weeklyReview:[
+  "You are Fredrick, Chief of Staff to Kelechi Dozie.",CTX,
+  "Below are the recent meeting records for ONE active business (its profile is prepended). Produce a weekly review that a principal can act on in two minutes.",
+  "",
+  "Format exactly:",
+  "",
+  "1. THE WEEK",
+  "[2-3 sentences on what actually happened across these meetings for this business.]",
+  "",
+  "2. DECISIONS MADE",
+  "[Bullets. If none, say 'None recorded.']",
+  "",
+  "3. OPEN ACTION ITEMS",
+  "[Bullets as: owner — task — due. Carry forward anything still open from earlier meetings; flag items with no owner or no due date.]",
+  "",
+  "4. RISKS & FLAGS",
+  "[Bullets grounded in this business's priorities and constraints.]",
+  "",
+  "5. WHERE KELECHI IS NEEDED",
+  "[1-3 specific asks or decisions only he can make.]",
+  "",
+  "Max 380 words. Board-level tone. If there are no meetings in the window, say so plainly and stop."
 ].join("\n")
 };
 
@@ -930,7 +1046,7 @@ function initAuth(){
   SB.auth.getSession().then(function(r){session=(r.data&&r.data.session)||null;onAuth();});
   SB.auth.onAuthStateChange(function(_evt,s){session=s;onAuth();});
 }
-function onAuth(){renderAuthUI();if(cloudOn())hydrateFromCloud();}
+function onAuth(){renderAuthUI();if(cloudOn())hydrateFromCloud();if(currentView==='meetings')refreshMeetingsView();}
 function sendMagicLink(){
   if(!SB){showErr('Sync unavailable — could not load the Supabase client.');return;}
   var email=(document.getElementById('auth-email')||{}).value;
@@ -1037,6 +1153,7 @@ function renderBizUI(){
 
 function switchBusiness(id){
   activeBizId=id;saveActiveBiz();renderBizUI();loadHistory();updateRunBtn();closeBizMenu();
+  if(currentView==='meetings')refreshMeetingsView();
 }
 
 function toggleBizMenu(e){
@@ -1540,7 +1657,7 @@ function copySyn(){
 /* ── API CALL WITH RETRY ──────────────────────────── */
 /* Model strategy: frontier model for orchestration + synthesis, fast model for specialist fan-out */
 var MODELS={orchestrator:'claude-fable-5',specialist:'claude-sonnet-4-6'};
-var TOKENS={plan:2048,specialist:4096,synthesis:8192};
+var TOKENS={plan:2048,specialist:4096,synthesis:8192,meeting:4096};
 
 /* ── COST METER ───────────────────────────────────
    Current list pricing, USD per 1M tokens.
@@ -2034,6 +2151,210 @@ function resetAll(){
   var fsec=document.getElementById('followup-sec');if(fsec)fsec.style.display='none';
   currentRunId=null;
   lastOutputs={};lastBriefs={};lastSynthesis='';lastSummary='';lastAgents=[];currentPlan=null;running=false;
+}
+
+/* ══ PHASE 4 — MEETING INTELLIGENCE ═══════════════════════════════
+   Ingest transcripts/notes → store original (untouched) + SHA-256 +
+   provenance in the audit log, upload to the meeting-files bucket,
+   and have Fredrick normalise into a canonical record. Requires sign-in
+   (storage + meetings table are RLS-gated to the account). */
+var currentView='command',mtgProv='own_transcript',mtgBusy=false;
+var AUDIO_EXT=['mp3','m4a','wav','aac','ogg','flac','mp4','mov','m4v'];
+
+function switchView(v){
+  currentView=v;
+  document.getElementById('command-view').style.display=(v==='command')?'block':'none';
+  document.getElementById('meetings-view').style.display=(v==='meetings')?'block':'none';
+  document.getElementById('vtab-command').classList.toggle('active',v==='command');
+  document.getElementById('vtab-meetings').classList.toggle('active',v==='meetings');
+  if(v==='meetings')refreshMeetingsView();
+}
+function setProv(p){
+  mtgProv=p;
+  document.getElementById('prov-own').classList.toggle('active',p==='own_transcript');
+  document.getElementById('prov-notes').classList.toggle('active',p==='imported_notes');
+}
+function refreshMeetingsView(){
+  var biz=getActiveBiz();
+  document.getElementById('mtg-biz').textContent=biz?biz.name.toUpperCase():'—';
+  var signedIn=cloudOn();
+  document.getElementById('mtg-gate').style.display=signedIn?'none':'block';
+  document.getElementById('mtg-intake').style.display=signedIn?'block':'none';
+  document.getElementById('mtg-review-btn').style.display=signedIn?'inline-block':'none';
+  document.getElementById('mtg-review-card').style.display='none';
+  if(signedIn)loadMeetings(); else document.getElementById('mtg-list').innerHTML='';
+}
+function mtgStatus(t,show){var el=document.getElementById('mtg-status');el.textContent=t||'';el.style.display=(show===false||!t)?'none':'block';}
+function mtgOver(e){e.preventDefault();document.getElementById('mtg-dropzone').classList.add('drag');}
+function mtgLeave(){document.getElementById('mtg-dropzone').classList.remove('drag');}
+function mtgDrop(e){e.preventDefault();document.getElementById('mtg-dropzone').classList.remove('drag');mtgFilesChosen(e.dataTransfer.files);}
+function mtgFilesChosen(files){
+  if(!cloudOn()){showErr('Sign in (sidebar → SYNC) to ingest meetings.');return;}
+  var arr=Array.from(files);
+  (function next(i){
+    if(i>=arr.length){return;}
+    ingestMeeting(arr[i]).then(function(){next(i+1);}).catch(function(){next(i+1);});
+  })(0);
+}
+
+function sha256hex(buf){
+  return crypto.subtle.digest('SHA-256',buf).then(function(h){
+    return Array.prototype.map.call(new Uint8Array(h),function(b){return('0'+b.toString(16)).slice(-2);}).join('');
+  });
+}
+/* reuse the command uploader's extraction to build Claude content blocks */
+function extractBlocks(file){
+  return new Promise(function(resolve){
+    var ext=file.name.split('.').pop().toLowerCase();
+    var doc={name:file.name,ext:ext,ready:false,contentBlocks:[]};
+    var origFileReady=fileReady, origRender=renderPills, origProc=processingCount;
+    // run processFile but capture completion via polling the doc.ready flag
+    processFile(file,doc);
+    var tries=0;
+    (function wait(){
+      if(doc.ready||tries>200){resolve(doc.contentBlocks.length?doc.contentBlocks:[{type:'text',text:'[unreadable file]'}]);return;}
+      tries++;setTimeout(wait,50);
+    })();
+  });
+}
+
+function ingestMeeting(file){
+  return new Promise(function(resolve,reject){
+    if(mtgBusy){reject();return;}
+    var ext=file.name.split('.').pop().toLowerCase();
+    if(AUDIO_EXT.indexOf(ext)>=0){
+      mtgStatus('Audio transcription (Deepgram / AssemblyAI) is not yet configured — upload a text transcript (.vtt/.srt/.txt) or notes for now.');
+      reject();return;
+    }
+    if(file.size>20*1024*1024){showErr(file.name+': file too large (max 20MB).');reject();return;}
+    mtgBusy=true;runCost=0;updateCostMeter();
+    mtgStatus('Reading '+file.name+'…');
+    var meetingId='mtg_'+Date.now().toString(36);
+    var safeName=file.name.replace(/[^\w.\-]+/g,'_');
+    var storagePath=uid()+'/'+meetingId+'/'+safeName;
+    var hashHex='';
+    readAB(file)
+      .then(function(ab){return sha256hex(ab);})
+      .then(function(h){
+        hashHex=h;
+        mtgStatus('Storing original (SHA-256 '+h.slice(0,10)+'…)');
+        return SB.storage.from('meeting-files').upload(storagePath,file,{contentType:file.type||'application/octet-stream',upsert:false});
+      })
+      .then(function(up){
+        if(up&&up.error)console.warn('storage:',up.error.message); // record even if storage hiccups; audit still fires
+        mtgStatus('Fredrick normalising the record…');
+        return extractBlocks(file);
+      })
+      .then(function(blocks){
+        var biz=getActiveBiz();
+        var instr=(biz?formatBizContext(biz)+'\n\n':'')
+          +'PROVENANCE: '+(mtgProv==='own_transcript'?'own recorded/transcribed meeting':'imported third-party notes')
+          +'\nFilename: '+file.name+'\nNormalise this meeting into the canonical JSON record.';
+        var content=blocks.concat([{type:'text',text:instr}]);
+        return callAPI(SP.meetingNormalize,content,1,MODELS.specialist,TOKENS.meeting);
+      })
+      .then(function(raw){
+        var rec;try{rec=extractJSON(raw);}catch(e){rec={summary:'(could not parse — raw output stored)',_raw:raw.slice(0,2000),platform:'Unknown',attendees:[],decisions:[],action_items:[],open_questions:[],flags:[]};}
+        var data={
+          kind:'meeting',filename:file.name,sha256:hashHex,storage_path:storagePath,
+          provenance:mtgProv,uploaded_at:new Date().toISOString(),uploader:(session&&session.user?session.user.email:''),
+          meeting_date:rec.meeting_date||null,platform:rec.platform||'Unknown',attendees:rec.attendees||[],
+          agenda:rec.agenda||null,decisions:rec.decisions||[],action_items:rec.action_items||[],
+          open_questions:rec.open_questions||[],flags:rec.flags||[],summary:rec.summary||''
+        };
+        return SB.from('meetings').insert({user_id:uid(),meeting_id:meetingId,biz_id:activeBizId,data:data}).then(function(r){
+          if(r.error)throw new Error(r.error.message);
+          // Audit: original + SHA-256 + timestamp + uploader + provenance
+          audit('meeting.ingested','meeting',meetingId,{sha256:hashHex,filename:file.name,provenance:mtgProv,uploaded_at:data.uploaded_at,uploader:data.uploader,storage_path:storagePath});
+        });
+      })
+      .then(function(){
+        mtgBusy=false;mtgStatus('✓ '+file.name+' ingested.');updateCostMeter();
+        setTimeout(function(){mtgStatus('',false);},4000);
+        loadMeetings();resolve();
+      })
+      .catch(function(e){
+        mtgBusy=false;mtgStatus('',false);showErr('Meeting ingest failed: '+(e&&e.message?e.message:e));reject(e);
+      });
+  });
+}
+
+function loadMeetings(){
+  if(!cloudOn()){document.getElementById('mtg-list').innerHTML='';return;}
+  SB.from('meetings').select('meeting_id,biz_id,data,created_at').eq('biz_id',activeBizId).order('created_at',{ascending:false}).then(function(r){
+    var el=document.getElementById('mtg-list');
+    if(r.error){el.innerHTML='<div class="mtg-empty">COULD NOT LOAD MEETINGS</div>';return;}
+    var rows=(r.data||[]).filter(function(m){return !(m.data&&m.data.kind==='weekly_review');});
+    if(!rows.length){el.innerHTML='<div class="mtg-empty">NO MEETINGS INGESTED YET</div>';return;}
+    el.innerHTML='';
+    rows.forEach(function(m){el.appendChild(meetingCard(m));});
+  });
+}
+function meetingCard(m){
+  var d=m.data||{};
+  var wrap=document.createElement('div');wrap.className='mcard';
+  var attendees=(d.attendees||[]).join(' · ');
+  var provOwn=d.provenance==='own_transcript';
+  var h='<div class="mcard-bar"></div><div class="mcard-inner">';
+  h+='<div class="mcard-top"><div><div class="mcard-plat">'+escHtml((d.platform||'Unknown').toUpperCase())+(d.meeting_date?' · '+escHtml(d.meeting_date):'')+'</div>'
+    +'<div class="mcard-meta">'+escHtml(d.filename||'')+(attendees?' · '+escHtml(attendees):'')+'</div></div>'
+    +'<span class="mcard-prov'+(provOwn?' own':'')+'">'+(provOwn?'OWN TRANSCRIPT':'IMPORTED NOTES')+'</span></div>';
+  if(d.summary)h+='<div class="mcard-sum">'+escHtml(d.summary)+'</div>';
+  if(d.decisions&&d.decisions.length){h+='<div class="mcard-sec">DECISIONS</div><ul>'+d.decisions.map(function(x){return '<li>'+escHtml(x)+'</li>';}).join('')+'</ul>';}
+  if(d.action_items&&d.action_items.length){
+    h+='<div class="mcard-sec">ACTION ITEMS</div><ul>'+d.action_items.map(function(a){
+      return '<li><span class="ai-owner">'+escHtml(a.owner||'Unassigned')+'</span> — '+escHtml(a.task||'')+(a.due?'<span class="ai-due">DUE '+escHtml(a.due)+'</span>':'')+'</li>';
+    }).join('')+'</ul>';
+  }
+  if(d.open_questions&&d.open_questions.length){h+='<div class="mcard-sec">OPEN QUESTIONS</div><ul>'+d.open_questions.map(function(x){return '<li>'+escHtml(x)+'</li>';}).join('')+'</ul>';}
+  if(d.flags&&d.flags.length){h+='<div class="mcard-sec">FLAGS</div><ul class="mcard-flag">'+d.flags.map(function(x){return '<li>'+escHtml(x)+'</li>';}).join('')+'</ul>';}
+  h+='<div class="mcard-foot"><span class="mcard-hash">SHA-256 '+escHtml((d.sha256||'').slice(0,16))+'… · '+escHtml((d.uploader||''))+'</span>'
+    +'<button class="copy-btn" onclick="viewOriginal(\''+escHtml(d.storage_path||'')+'\')">VIEW ORIGINAL</button></div>';
+  h+='</div>';
+  wrap.innerHTML=h;
+  return wrap;
+}
+function viewOriginal(path){
+  if(!path||!cloudOn())return;
+  SB.storage.from('meeting-files').createSignedUrl(path,120).then(function(r){
+    if(r.error||!r.data){showErr('Could not open original: '+(r.error?r.error.message:'unknown'));return;}
+    window.open(r.data.signedUrl,'_blank');
+  });
+}
+
+function weeklyReview(){
+  if(!cloudOn()){showErr('Sign in to run the weekly review.');return;}
+  if(mtgBusy)return;
+  mtgBusy=true;runCost=0;updateCostMeter();
+  var card=document.getElementById('mtg-review-card');
+  card.style.display='block';
+  card.innerHTML='<div class="mrv-hd"><div class="mrv-ttl">Weekly Review</div><div class="mrv-lbl">FREDRICK</div></div><div class="mrv-body" id="mrv-body">Compiling this week’s meetings…</div>';
+  // pull the last 30 days of meetings so prior open action items carry forward
+  var since=new Date(Date.now()-30*864e5).toISOString();
+  SB.from('meetings').select('meeting_id,data,created_at').eq('biz_id',activeBizId).gte('created_at',since).order('created_at',{ascending:false}).then(function(r){
+    var rows=((r.data)||[]).filter(function(m){return !(m.data&&m.data.kind==='weekly_review');});
+    if(!rows.length){document.getElementById('mrv-body').innerHTML=mdToHtml('No meetings recorded for this business in the last 30 days. Ingest a transcript or notes to begin.');mtgBusy=false;return;}
+    var wkAgo=Date.now()-7*864e5;
+    var compiled=rows.map(function(m){
+      var d=m.data||{};
+      var recent=new Date(m.created_at).getTime()>=wkAgo;
+      var ai=(d.action_items||[]).map(function(a){return '   - '+(a.owner||'Unassigned')+': '+(a.task||'')+(a.due?' (due '+a.due+')':'');}).join('\n');
+      return '=== '+(d.platform||'Unknown')+' · '+(d.meeting_date||m.created_at.slice(0,10))+(recent?' [THIS WEEK]':' [earlier]')+' ==='
+        +'\nSummary: '+(d.summary||'')
+        +(d.decisions&&d.decisions.length?'\nDecisions: '+d.decisions.join('; '):'')
+        +(ai?'\nAction items:\n'+ai:'')
+        +(d.open_questions&&d.open_questions.length?'\nOpen questions: '+d.open_questions.join('; '):'')
+        +(d.flags&&d.flags.length?'\nFlags: '+d.flags.join('; '):'');
+    }).join('\n\n');
+    var biz=getActiveBiz();
+    var input=(biz?formatBizContext(biz)+'\n\n':'')+'RECENT MEETING RECORDS (last 30 days; [THIS WEEK] marks the current 7-day window):\n\n'+compiled;
+    callAPI(SP.weeklyReview,input,1,MODELS.orchestrator,TOKENS.synthesis).then(function(out){
+      document.getElementById('mrv-body').innerHTML=mdToHtml(out);
+      audit('review.generated','review',activeBizId,{meetings:rows.length});
+      mtgBusy=false;updateCostMeter();
+      card.scrollIntoView({behavior:'smooth',block:'start'});
+    }).catch(function(e){document.getElementById('mrv-body').textContent='Review failed: '+e.message;mtgBusy=false;});
+  });
 }
 </script>
 </body>

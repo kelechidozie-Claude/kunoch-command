@@ -82,6 +82,21 @@ on the existing index.html:
    (#C9A84C) border ring at 6% margin, centered bold serif "K" in gold at ~52% height.
    Python3 + Pillow if available (pip3 install --user pillow), else any equivalent method.
 
+8b. READABILITY PASS — apply in BOTH paths (also on the sha-verified downloaded file;
+   its checksum no longer needs to match after this edit):
+   Kelechi reports the colour scheme is hard to read. Keep the dark-gold identity but
+   raise contrast and minimum sizes:
+   - :root token changes: --text #E2E6F0 -> #EDF0F7; --text-dim #8892A4 -> #B4BCCB;
+     --text-muted #374151 -> #8A94A6.
+   - Small gold labels (7-9px gold text on dark): use #D9BC6B instead of #C9A84C for
+     text only; keep #C9A84C for borders, buttons, and large headings.
+   - Minimum font size anywhere in the app: 9px. Bump all 7px -> 9px and 8px -> 10px
+     (sidebar labels, hist-meta, brief text, badges, api labels, biz menu stages).
+     Where letter-spacing is 3px on text now sized <11px, reduce to 2px.
+   - Agent roster: names 10px, role lines 11px --text-dim.
+   - Verify nothing overflows: sidebar is 278px wide; if a bumped label wraps badly,
+     shorten its text rather than shrinking the font.
+
 9. VERIFY + DEPLOY:
    - Sanity: extract the main <script> block and confirm it parses (node --check on the
      extracted JS, or new Function). Confirm markers exist: MODELS.orchestrator,
