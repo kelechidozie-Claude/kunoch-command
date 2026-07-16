@@ -91,6 +91,9 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 #topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 36px;height:50px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
 #tb-l{font-family:'DM Mono',monospace;font-size:8px;color:var(--text-muted);letter-spacing:3px}
 #tb-r{font-family:'DM Mono',monospace;font-size:8px;color:var(--text-muted);letter-spacing:2px}
+#tb-right{display:flex;align-items:center;gap:16px}
+#cost-meter{font-family:'DM Mono',monospace;font-size:8px;color:var(--text-muted);letter-spacing:1.5px;white-space:nowrap}
+#cost-meter .cm-lbl{color:var(--gold-dim)}
 #work{padding:30px 36px;flex:1}
 .sec-lbl{font-family:'DM Mono',monospace;font-size:7px;color:var(--text-muted);letter-spacing:4px;text-transform:uppercase;margin-bottom:10px}
 
@@ -197,6 +200,31 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 #syn-body p{margin-bottom:12px}
 
 #syn-footer{display:flex;justify-content:flex-end;margin-top:14px;padding-top:10px;border-top:1px solid var(--border)}
+/* ── FOLLOW-UP THREAD ─────────────────────────── */
+#followup-sec{display:none;margin-top:18px}
+#followup-thread{display:flex;flex-direction:column;gap:14px}
+.fu-item{background:var(--surface);border:1px solid var(--border);border-left:2px solid var(--gold);border-radius:var(--r);padding:18px 20px}
+.fu-q{font-size:13px;color:var(--text);font-family:'DM Sans',sans-serif;line-height:1.6;margin-bottom:10px}
+.fu-q-lbl{font-family:'DM Mono',monospace;font-size:7px;letter-spacing:2px;color:var(--gold);border:1px solid var(--gold-dim);border-radius:20px;padding:2px 8px;margin-right:8px}
+.fu-tags{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-bottom:12px}
+.fu-tag{font-family:'DM Mono',monospace;font-size:7px;letter-spacing:1.5px;padding:2px 8px;border:1px solid var(--border2);border-radius:20px;color:var(--text-muted)}
+.fu-meta{font-family:'DM Mono',monospace;font-size:7px;letter-spacing:1.5px;color:var(--text-muted);margin-left:auto}
+.fu-a{font-size:14px;color:var(--text);line-height:1.75;font-family:'DM Sans',sans-serif}
+.fu-a strong,.fu-a b{color:var(--gold);font-weight:600}
+.fu-a h4{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:2px;color:var(--gold);text-transform:uppercase;margin:16px 0 8px;font-weight:500}
+.fu-a h4:first-child{margin-top:0}
+.fu-a ul{margin:8px 0 8px 4px;list-style:none}
+.fu-a li{position:relative;padding-left:16px;margin-bottom:6px}
+.fu-a ul li::before{content:'›';position:absolute;left:2px;color:var(--gold-dim)}
+.fu-a ol{margin:8px 0 8px 20px}
+.fu-a p{margin-bottom:10px}
+#followup-compose{margin-top:16px}
+#followup-input{width:100%;background:var(--surface);border:1px solid var(--border);border-left:2px solid var(--gold);border-radius:var(--r);color:var(--text);padding:14px 16px;font-size:13px;font-family:'DM Sans',sans-serif;resize:vertical;outline:none;line-height:1.7;min-height:70px;display:block;transition:border-color .3s}
+#followup-input:focus{border-color:var(--gold-dim)}
+#followup-status{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1.5px;color:var(--gold);margin:8px 0;display:none}
+#followup-btn{margin-top:10px;background:transparent;border:1px solid var(--gold-dim);border-radius:var(--r);color:var(--gold);font-family:'DM Mono',monospace;font-size:9px;letter-spacing:2px;padding:10px 18px;cursor:pointer;transition:all .2s}
+#followup-btn:hover:not(:disabled){background:var(--gold-glow);border-color:var(--gold)}
+#followup-btn:disabled{opacity:.5;cursor:default}
 
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.25}}
 @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
@@ -353,7 +381,10 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
         <div class="biz-action" onclick="openBizModal('current')">⚙ EDIT CURRENT</div>
       </div>
     </div>
-    <div id="tb-r"></div>
+    <div id="tb-right">
+      <div id="cost-meter" title="Estimated API spend — this interaction · month-to-date"><span class="cm-lbl">RUN</span> $0.00 · <span class="cm-lbl">MTD</span> $0.00</div>
+      <div id="tb-r"></div>
+    </div>
   </div>
 
   <div id="work">
@@ -472,6 +503,17 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
         <div id="syn-hdr"><div id="syn-title">Executive Briefing</div><div id="syn-lbl">FREDRICK'S SYNTHESIS</div></div>
         <div id="syn-body"></div>
         <div id="syn-footer"><button class="copy-btn" onclick="copySyn()">COPY BRIEFING</button></div>
+      </div>
+
+      <!-- FOLLOW-UP THREAD -->
+      <div id="followup-sec">
+        <div id="followup-thread"></div>
+        <div id="followup-compose">
+          <div class="sec-lbl">CONTINUE THE THREAD</div>
+          <textarea id="followup-input" placeholder="Ask a follow-up. Fredrick routes it to only the relevant specialist(s) and builds on this briefing.&#10;⌘ + ENTER TO SEND"></textarea>
+          <div id="followup-status"></div>
+          <button id="followup-btn" onclick="askFollowUp()">↳ ASK FOLLOW-UP</button>
+        </div>
       </div>
     </div>
   </div>
@@ -818,6 +860,25 @@ synthesis:[
   "[Exactly 3 numbered actions. Specific, assigned if possible, time-bound.]",
   "",
   "Max 380 words. Board-level tone. No filler."
+].join("\n"),
+
+synthesisFollow:[
+  "You are Fredrick, Chief of Staff to Kelechi Dozie.",CTX,
+  "A FOLLOW-UP question has been raised on a prior briefing — the prior directive, executive briefing, and any earlier follow-ups are included below, followed by fresh specialist input.",
+  "Answer the follow-up directly and decisively. Build on the prior conclusions; do not repeat the whole briefing.",
+  "",
+  "Format exactly:",
+  "",
+  "DIRECT ANSWER",
+  "[Answer the follow-up in 2-3 sentences, grounded in this business's reality.]",
+  "",
+  "WHAT CHANGES",
+  "[1-2 bullets: what this means for the prior recommendation — or state that it stands unchanged.]",
+  "",
+  "NEXT STEP",
+  "[One concrete, time-bound action.]",
+  "",
+  "Max 220 words. Board-level tone. No filler."
 ].join("\n")
 };
 
@@ -1030,8 +1091,29 @@ function formatBizContext(biz){
   if(biz.dos)brandBits.push("Do's: "+biz.dos);
   if(biz.donts)brandBits.push("Don'ts: "+biz.donts);
   if(brandBits.length){L.push('─── BRAND ───');brandBits.forEach(function(b){L.push(b);});}
+  // Memory loop: prior conclusions for this business, so new directives build on them
+  var mem=formatMemory(biz.id);
+  if(mem)L.push(mem);
   L.push('═══════════════════════════════════════');
   return L.join('\n');
+}
+
+/* Last 2-3 run summaries for a business — injected so agents build on prior conclusions */
+function formatMemory(bizId){
+  try{
+    var all=JSON.parse(localStorage.getItem('kc_history_v3')||'{}');
+    var hist=(bizId&&all[bizId])||[];
+    if(!hist.length)return '';
+    var recent=hist.slice(0,3);
+    var L=['─── RECENT DECISIONS (memory) ───'];
+    recent.forEach(function(h){
+      var line='• ['+(h.date||'')+'] '+((h.task||'').slice(0,90));
+      if(h.summary)line+=' → '+((h.summary||'').slice(0,120));
+      L.push(line);
+    });
+    L.push('Build on these prior conclusions; flag explicitly if the new directive contradicts them.');
+    return L.join('\n');
+  }catch(e){return '';}
 }
 
 
@@ -1171,6 +1253,7 @@ window.onload=function(){
   renderBizUI();
   loadHistory();
   updateRunBtn();
+  updateCostMeter();
   if('serviceWorker' in navigator){try{navigator.serviceWorker.register('./sw.js');}catch(e){}}
 };
 function toggleApi(){document.getElementById('api-panel').classList.toggle('open');}
@@ -1187,6 +1270,7 @@ function saveKey(){
 }
 function getKey(){return localStorage.getItem('kc_api_key')||document.getElementById('apikey').value.trim();}
 document.getElementById('task').addEventListener('keydown',function(e){if((e.metaKey||e.ctrlKey)&&e.key==='Enter'){e.preventDefault();go();}});
+document.getElementById('followup-input').addEventListener('keydown',function(e){if((e.metaKey||e.ctrlKey)&&e.key==='Enter'){e.preventDefault();askFollowUp();}});
 
 /* ── UI HELPERS ───────────────────────────────────── */
 function setPhase(t,c){var e=document.getElementById('sb-phase');e.textContent=t;e.style.color=c||'var(--text-muted)';}
@@ -1351,6 +1435,31 @@ function copySyn(){
 var MODELS={orchestrator:'claude-fable-5',specialist:'claude-sonnet-4-6'};
 var TOKENS={plan:2048,specialist:4096,synthesis:8192};
 
+/* ── COST METER ───────────────────────────────────
+   Current list pricing, USD per 1M tokens.
+   Fable 5 (orchestrator): $10 in / $50 out.  Sonnet 4.6 (specialist): $3 in / $15 out. */
+var PRICING={'claude-fable-5':{in:10,out:50},'claude-sonnet-4-6':{in:3,out:15}};
+var runCost=0,currentRunId=null;
+function monthKey(){return new Date().toISOString().slice(0,7);}
+function recordCost(model,usage){
+  if(!usage)return;
+  var p=PRICING[model]||PRICING[MODELS.specialist];
+  var c=((usage.input_tokens||0)/1e6)*p.in+((usage.output_tokens||0)/1e6)*p.out;
+  runCost+=c;
+  try{
+    var all=JSON.parse(localStorage.getItem('kc_costs')||'{}');
+    var mk=monthKey();all[mk]=(all[mk]||0)+c;
+    localStorage.setItem('kc_costs',JSON.stringify(all));
+  }catch(e){}
+  updateCostMeter();
+}
+function monthlyCost(){try{var all=JSON.parse(localStorage.getItem('kc_costs')||'{}');return all[monthKey()]||0;}catch(e){return 0;}}
+function fmtUSD(n){return '$'+((n>0&&n<0.01)?n.toFixed(4):n.toFixed(2));}
+function updateCostMeter(){
+  var el=document.getElementById('cost-meter');if(!el)return;
+  el.innerHTML='<span class="cm-lbl">RUN</span> '+fmtUSD(runCost)+' · <span class="cm-lbl">MTD</span> '+fmtUSD(monthlyCost());
+}
+
 function callAPI(system,content,attempt,model,maxTok){
   attempt=attempt||1;
   model=model||MODELS.specialist;
@@ -1373,7 +1482,10 @@ function callAPI(system,content,attempt,model,maxTok){
     }
     if(!r.ok)return r.text().then(function(t){throw new Error(t.slice(0,300));});
     return r.json();
-  }).then(function(d){return d.content&&d.content[0]?d.content[0].text:'';});
+  }).then(function(d){
+    if(d&&d.usage)recordCost(model,d.usage);
+    return d&&d.content&&d.content[0]?d.content[0].text:'';
+  });
 }
 
 function extractJSON(raw){
@@ -1410,6 +1522,8 @@ function go(){
   if(selMode==='manual'&&manualSel.length===0){showErr('MANUAL MODE: Please check at least one agent in the sidebar before running.');return;}
 
   running=true;lastTask=task;lastOutputs={};lastBriefs={};lastSynthesis='';lastSummary='';lastAgents=[];currentPlan=null;
+  runCost=0;currentRunId=null;updateCostMeter();
+  document.getElementById('followup-sec').style.display='none';
   document.getElementById('runbtn').disabled=true;document.getElementById('runbtn').textContent='RUNNING...';
   document.getElementById('rstbtn').style.display='none';document.getElementById('pdfbtn').style.display='none';
   document.getElementById('errbox').style.display='none';
@@ -1501,10 +1615,12 @@ function runWithPlan(plan,task,docNote){
 /* ── HISTORY (per business, full runs, localStorage) ─────── */
 function saveToHistory(task,summary){
   if(!activeBizId)return;
+  var rid='run_'+Date.now().toString(36);
+  currentRunId=rid;
   var all=JSON.parse(localStorage.getItem('kc_history_v3')||'{}');
   var hist=all[activeBizId]||[];
   hist.unshift({
-    id:'run_'+Date.now().toString(36),
+    id:rid,
     task:task,summary:summary,
     agents:lastAgents.slice(),briefs:JSON.parse(JSON.stringify(lastBriefs)),
     outputs:JSON.parse(JSON.stringify(lastOutputs)),synthesis:lastSynthesis,
@@ -1523,7 +1639,111 @@ function saveToHistory(task,summary){
     }
   }
   loadHistory();
+  showFollowUp(findRun(rid));
 }
+
+/* ── FOLLOW-UP THREAD (continue a completed run with only the relevant agents) ── */
+function findRun(id){
+  if(!id||!activeBizId)return null;
+  var all=JSON.parse(localStorage.getItem('kc_history_v3')||'{}');
+  var hist=all[activeBizId]||[];
+  for(var i=0;i<hist.length;i++){if(hist[i].id===id)return hist[i];}
+  return null;
+}
+function showFollowUp(run){
+  var sec=document.getElementById('followup-sec');if(!sec)return;
+  if(!run||!run.id){sec.style.display='none';return;}
+  currentRunId=run.id;
+  renderFollowThread(run);
+  document.getElementById('followup-input').value='';
+  document.getElementById('followup-status').style.display='none';
+  sec.style.display='block';
+}
+function renderFollowThread(run){
+  var wrap=document.getElementById('followup-thread');if(!wrap)return;
+  wrap.innerHTML='';
+  var fus=(run&&run.followups)||[];
+  fus.forEach(function(f){
+    var tags=(f.agents||[]).map(function(id){return '<span class="fu-tag">'+(AN[id]||id).toUpperCase()+'</span>';}).join('');
+    var d=document.createElement('div');d.className='fu-item';
+    d.innerHTML='<div class="fu-q"><span class="fu-q-lbl">FOLLOW-UP</span>'+escHtml(f.q)+'</div>'
+      +'<div class="fu-tags">'+tags+'<span class="fu-meta">'+escHtml(f.date||'')+' · '+escHtml(f.time||'')+'</span></div>'
+      +'<div class="fu-a">'+mdToHtml(f.synthesis||'')+'</div>';
+    wrap.appendChild(d);
+  });
+}
+function saveFollowUp(id,entry){
+  var all=JSON.parse(localStorage.getItem('kc_history_v3')||'{}');
+  var hist=all[activeBizId]||[];
+  var run=null;for(var i=0;i<hist.length;i++){if(hist[i].id===id){run=hist[i];break;}}
+  if(!run)return;
+  run.followups=run.followups||[];
+  run.followups.push(entry);
+  for(var tries=0;tries<6;tries++){
+    try{localStorage.setItem('kc_history_v3',JSON.stringify(all));break;}
+    catch(e){
+      var trimmed=false;
+      Object.keys(all).forEach(function(b){if(all[b].length>2){all[b]=all[b].slice(0,all[b].length-1);trimmed=true;}});
+      if(!trimmed){showErr('History storage full — use EXPORT DATA to back up.');break;}
+    }
+  }
+  loadHistory();
+}
+function askFollowUp(){
+  if(running)return;
+  var q=document.getElementById('followup-input').value.trim();
+  if(!q)return;
+  if(!getKey()){showErr('No API key set. Open the panel at the bottom-left of the sidebar and save your key.');return;}
+  var run=findRun(currentRunId);
+  if(!run){showErr('Complete or open a run before asking a follow-up.');return;}
+  running=true;runCost=0;updateCostMeter();
+  var btn=document.getElementById('followup-btn');btn.disabled=true;
+  var st=document.getElementById('followup-status');st.style.display='block';st.textContent='Fredrick routing the follow-up…';
+
+  var prior='PRIOR DIRECTIVE: '+run.task+'\n\nPRIOR EXECUTIVE BRIEFING:\n'+(run.synthesis||'');
+  (run.followups||[]).forEach(function(f){prior+='\n\nEARLIER FOLLOW-UP: '+f.q+'\nANSWER:\n'+(f.synthesis||'');});
+
+  var planContent='This is a FOLLOW-UP to a completed briefing. Select ONLY the 1-3 agents strictly needed to answer the follow-up, and write tightly scoped briefs for the follow-up only.\n\n'+prior+'\n\nFOLLOW-UP QUESTION: '+q;
+
+  callAPI(SP.fredrick,buildContent(planContent),1,MODELS.orchestrator,TOKENS.plan).then(function(raw){
+    var plan;
+    try{plan=extractJSON(raw);}
+    catch(e){plan={agents_selected:['board'],briefs:{board:'Answer the follow-up: '+q}};}
+    var ids=(plan.agents_selected||[]).filter(function(id){return SP[id];});
+    if(!ids.length){ids=['board'];plan.briefs=plan.briefs||{};plan.briefs.board=plan.briefs.board||('Answer the follow-up: '+q);}
+    st.textContent='Consulting '+ids.map(function(id){return AN[id]||id;}).join(', ')+'…';
+    var outputs={};
+    var proms=ids.map(function(id,i){
+      var brief=(plan.briefs&&plan.briefs[id])||('Answer the follow-up: '+q);
+      var agentContent=prior+'\n\nFOLLOW-UP QUESTION: '+q+'\n\nYOUR BRIEF: '+brief;
+      return new Promise(function(resolve){
+        setTimeout(function(){
+          callAPI(SP[id],buildContent(agentContent))
+            .then(function(o){outputs[id]=o;})
+            .catch(function(e){outputs[id]='Agent failed: '+e.message;})
+            .then(resolve);
+        },i*600);
+      });
+    });
+    Promise.all(proms).then(function(){
+      st.textContent='Fredrick synthesising the answer…';
+      var si=prior+'\n\nFOLLOW-UP QUESTION: '+q+'\n\n'+ids.map(function(id){return '=== '+(AN[id]||id).toUpperCase()+' ===\n'+outputs[id];}).join('\n\n');
+      var biz=getActiveBiz();
+      var synInput=(biz?formatBizContext(biz)+'\n\n':'')+si;
+      callAPI(SP.synthesisFollow,synInput,1,MODELS.orchestrator,TOKENS.synthesis).then(function(ans){
+        var entry={q:q,agents:ids.slice(),briefs:JSON.parse(JSON.stringify(plan.briefs||{})),outputs:JSON.parse(JSON.stringify(outputs)),synthesis:ans,
+          time:new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}),
+          date:new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short'})};
+        saveFollowUp(currentRunId,entry);
+        document.getElementById('followup-input').value='';
+        st.style.display='none';btn.disabled=false;running=false;
+        renderFollowThread(findRun(currentRunId));
+        updateCostMeter();
+      }).catch(function(e){st.style.display='none';btn.disabled=false;running=false;showErr('Follow-up synthesis failed: '+e.message);});
+    });
+  }).catch(function(e){st.style.display='none';btn.disabled=false;running=false;showErr('Follow-up failed: '+e.message);});
+}
+
 function loadHistory(){
   var all=JSON.parse(localStorage.getItem('kc_history_v3')||'{}');
   var hist=(activeBizId&&all[activeBizId])||[];
@@ -1562,6 +1782,7 @@ function openRun(h){
   document.getElementById('rstbtn').style.display='inline-block';
   document.getElementById('pdfbtn').style.display='inline-block';
   setPhase('ARCHIVED RUN · '+(h.date||'')+' '+(h.time||''),'var(--board)');
+  showFollowUp(findRun(h.id)||h);
   document.getElementById('results').scrollIntoView({behavior:'smooth',block:'start'});
 }
 
@@ -1688,6 +1909,8 @@ function resetAll(){
   ['fredrick','cfo','legal','ma','ppp','board','tech','research'].forEach(function(id){setSba(id,'idle');});
   setPhase('AWAITING ORDERS','');
   uploadedDocs=[];renderPills();
+  var fsec=document.getElementById('followup-sec');if(fsec)fsec.style.display='none';
+  currentRunId=null;
   lastOutputs={};lastBriefs={};lastSynthesis='';lastSummary='';lastAgents=[];currentPlan=null;running=false;
 }
 </script>
