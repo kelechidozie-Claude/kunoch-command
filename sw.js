@@ -1,7 +1,7 @@
 /* Kunoch Command service worker — app shell caching.
    Network-first so updates always win; cache fallback for offline open.
    API calls (api.anthropic.com) are never cached. */
-var CACHE = 'kunoch-v3-1';
+var CACHE = 'kunoch-v3-2';
 var SHELL = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', function (e) {

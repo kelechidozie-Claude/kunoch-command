@@ -10,6 +10,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Kunoch">
 <link rel="apple-touch-icon" href="./icon-192.png">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
@@ -303,6 +304,14 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 #backup-row{display:flex;gap:6px;padding:8px 0 0}
 .bk-btn{flex:1;background:transparent;border:1px solid var(--border);border-radius:2px;color:var(--text-muted);font-family:'DM Mono',monospace;font-size:7px;letter-spacing:2px;padding:6px 4px;cursor:pointer;transition:all .2s}
 .bk-btn:hover{border-color:var(--gold-dim);color:var(--gold)}
+/* ── CLOUD SYNC PANEL ─────────────────────────── */
+#sync-box{margin-top:8px;padding:9px 10px;border:1px solid var(--border);border-radius:2px;background:var(--surface2)}
+.sync-lbl{font-family:'DM Mono',monospace;font-size:7px;letter-spacing:1.5px;color:var(--text-muted);display:flex;align-items:center;gap:6px;margin-bottom:7px;line-height:1.5}
+.sync-dot{width:6px;height:6px;border-radius:50%;background:var(--text-muted);flex-shrink:0}
+.sync-dot.on{background:var(--cfo);box-shadow:0 0 6px var(--cfo)}
+.sync-input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:2px;color:var(--text);font-family:'DM Mono',monospace;font-size:9px;padding:6px 8px;margin-bottom:6px;outline:none}
+.sync-input:focus{border-color:var(--gold-dim)}
+.sync-msg{font-family:'DM Mono',monospace;font-size:7px;letter-spacing:0.5px;color:var(--gold);margin-top:6px;line-height:1.5}
 </style>
 </head>
 <body>
@@ -363,6 +372,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
       <button class="bk-btn" onclick="document.getElementById('importfile').click()">⭱ IMPORT</button>
       <input type="file" id="importfile" accept=".json" style="display:none" onchange="importData(this)" />
     </div>
+    <div id="sync-box"><div class="sync-lbl">SYNC INITIALISING…</div></div>
   </div>
 </div>
 
@@ -902,6 +912,98 @@ var DEFAULT_BUSINESSES=[
 
 var businesses=[],activeBizId=null,editingBizId=null;
 
+/* ── SUPABASE CLOUD SYNC (progressive enhancement) ─────────────────
+   Signed out → app runs exactly as before (localStorage + client API key).
+   Signed in  → data mirrors to Supabase (phone + desktop share one dataset)
+                and Anthropic calls route through the server-side Edge Function
+                proxy so the API key never lives in the browser.
+   localStorage always stays populated as the offline cache. */
+var SUPA_URL='https://eplsmeenlwbglgtnzxau.supabase.co';
+var SUPA_KEY='sb_publishable_vadLFaWm-2YX9FJLLTCqJA_ZKI0WyZs';
+var SB=null,session=null,hydrating=false;
+try{if(window.supabase&&window.supabase.createClient)SB=window.supabase.createClient(SUPA_URL,SUPA_KEY);}catch(e){}
+function cloudOn(){return !!(SB&&session&&session.user);}
+function uid(){return (session&&session.user)?session.user.id:null;}
+
+function initAuth(){
+  if(!SB){renderAuthUI();return;}
+  SB.auth.getSession().then(function(r){session=(r.data&&r.data.session)||null;onAuth();});
+  SB.auth.onAuthStateChange(function(_evt,s){session=s;onAuth();});
+}
+function onAuth(){renderAuthUI();if(cloudOn())hydrateFromCloud();}
+function sendMagicLink(){
+  if(!SB){showErr('Sync unavailable — could not load the Supabase client.');return;}
+  var email=(document.getElementById('auth-email')||{}).value;
+  email=(email||'').trim();
+  if(!email){showErr('Enter your email to receive a magic link.');return;}
+  SB.auth.signInWithOtp({email:email,options:{emailRedirectTo:location.href.split('#')[0]}}).then(function(r){
+    var m=document.getElementById('auth-msg');
+    if(r.error){if(m)m.textContent='';showErr('Sign-in: '+r.error.message);}
+    else if(m)m.textContent='Magic link sent to '+email+'. Open it on this device to sign in.';
+  });
+}
+function signOut(){if(SB)SB.auth.signOut();}
+function renderAuthUI(){
+  var box=document.getElementById('sync-box');if(!box)return;
+  if(!SB){box.innerHTML='<div class="sync-lbl"><span class="sync-dot"></span>SYNC UNAVAILABLE — OFFLINE</div>';return;}
+  if(cloudOn()){
+    box.innerHTML='<div class="sync-lbl"><span class="sync-dot on"></span>SYNCED · '+escHtml(session.user.email||'signed in')+'</div>'
+      +'<button class="bk-btn" onclick="signOut()">SIGN OUT</button>';
+  }else{
+    box.innerHTML='<div class="sync-lbl"><span class="sync-dot"></span>LOCAL ONLY — SIGN IN TO SYNC DEVICES</div>'
+      +'<input id="auth-email" type="email" placeholder="you@email.com" class="sync-input" autocomplete="email" />'
+      +'<button class="bk-btn" onclick="sendMagicLink()">✦ SEND MAGIC LINK</button>'
+      +'<div id="auth-msg" class="sync-msg"></div>';
+  }
+}
+
+/* pull cloud → local cache (cloud wins); if cloud empty, migrate local up */
+function hydrateFromCloud(){
+  if(!cloudOn())return;
+  hydrating=true;
+  Promise.all([
+    SB.from('businesses').select('biz_id,data,sort').order('sort',{ascending:true}),
+    SB.from('runs').select('run_id,biz_id,data,created_at').order('created_at',{ascending:false})
+  ]).then(function(res){
+    var bz=(res[0]&&res[0].data)||[], rn=(res[1]&&res[1].data)||[];
+    if(!bz.length){hydrating=false;migrateLocalToCloud();return;}
+    businesses=bz.map(function(r){var d=r.data||{};d.id=r.biz_id;return d;});
+    try{localStorage.setItem('kc_businesses',JSON.stringify(businesses));}catch(e){}
+    var hist={};
+    rn.forEach(function(r){var d=r.data||{};d.id=r.run_id;(hist[r.biz_id]=hist[r.biz_id]||[]).push(d);});
+    try{localStorage.setItem('kc_history_v3',JSON.stringify(hist));}catch(e){}
+    if(!businesses.find(function(b){return b.id===activeBizId;})){activeBizId=businesses[0].id;saveActiveBiz();}
+    hydrating=false;
+    renderBizUI();loadHistory();updateRunBtn();
+  }).catch(function(){hydrating=false;});
+}
+function migrateLocalToCloud(){
+  if(!cloudOn())return;
+  cloudPushBusinesses();
+  var hist={};try{hist=JSON.parse(localStorage.getItem('kc_history_v3')||'{}');}catch(e){}
+  Object.keys(hist).forEach(function(biz){(hist[biz]||[]).forEach(function(rec){cloudPushRun(rec.id,biz,rec);});});
+  audit('migrate.local_to_cloud','system','',{businesses:businesses.length});
+}
+function cloudPushBusinesses(){
+  if(!cloudOn()||hydrating)return;
+  var u=uid();
+  var rows=businesses.map(function(b,i){return {user_id:u,biz_id:b.id,data:b,sort:i};});
+  SB.from('businesses').upsert(rows,{onConflict:'user_id,biz_id'}).then(function(r){if(r.error)console.warn('biz sync:',r.error.message);});
+}
+function cloudDeleteBusiness(bizId){
+  if(!cloudOn())return;
+  SB.from('runs').delete().eq('biz_id',bizId).then(function(){});
+  SB.from('businesses').delete().eq('biz_id',bizId).then(function(){audit('business.deleted','business',bizId,{});});
+}
+function cloudPushRun(runId,bizId,record){
+  if(!cloudOn()||hydrating)return;
+  SB.from('runs').upsert({user_id:uid(),run_id:runId,biz_id:bizId,data:record},{onConflict:'user_id,run_id'}).then(function(r){if(r.error)console.warn('run sync:',r.error.message);});
+}
+function audit(action,entity,entityId,detail){
+  if(!cloudOn())return;
+  SB.from('audit_log').insert({user_id:uid(),action:action,entity:entity,entity_id:entityId||'',detail:detail||{}}).then(function(){});
+}
+
 function loadBusinesses(){
   var raw=localStorage.getItem('kc_businesses');
   if(raw){
@@ -912,7 +1014,7 @@ function loadBusinesses(){
   activeBizId=localStorage.getItem('kc_active_biz')||businesses[0].id;
   if(!businesses.find(function(b){return b.id===activeBizId;}))activeBizId=businesses[0].id;
 }
-function saveBusinessesToStorage(){localStorage.setItem('kc_businesses',JSON.stringify(businesses));}
+function saveBusinessesToStorage(){localStorage.setItem('kc_businesses',JSON.stringify(businesses));cloudPushBusinesses();}
 function saveActiveBiz(){localStorage.setItem('kc_active_biz',activeBizId);}
 function getActiveBiz(){return businesses.find(function(b){return b.id===activeBizId;});}
 
@@ -1023,6 +1125,7 @@ function saveBusiness(){
     activeBizId=data.id;saveActiveBiz();
   }
   saveBusinessesToStorage();
+  audit('business.saved','business',data.id,{name:data.name});
   renderBizUI();loadHistory();closeBizModal();
 }
 
@@ -1031,12 +1134,14 @@ function deleteBusiness(){
   var biz=businesses.find(function(b){return b.id===editingBizId;});
   if(!biz)return;
   if(!confirm('Delete "'+biz.name+'" permanently? This removes its profile and history.'))return;
-  businesses=businesses.filter(function(b){return b.id!==editingBizId;});
+  var delId=editingBizId;
+  businesses=businesses.filter(function(b){return b.id!==delId;});
   // purge history for this business
   var hist=JSON.parse(localStorage.getItem('kc_history_v3')||'{}');
-  delete hist[editingBizId];
+  delete hist[delId];
   localStorage.setItem('kc_history_v3',JSON.stringify(hist));
-  if(activeBizId===editingBizId){activeBizId=businesses[0].id;saveActiveBiz();}
+  if(activeBizId===delId){activeBizId=businesses[0].id;saveActiveBiz();}
+  cloudDeleteBusiness(delId);
   saveBusinessesToStorage();renderBizUI();loadHistory();closeBizModal();
 }
 
@@ -1254,6 +1359,7 @@ window.onload=function(){
   loadHistory();
   updateRunBtn();
   updateCostMeter();
+  initAuth();
   if('serviceWorker' in navigator){try{navigator.serviceWorker.register('./sw.js');}catch(e){}}
 };
 function toggleApi(){document.getElementById('api-panel').classList.toggle('open');}
@@ -1364,7 +1470,8 @@ function importData(input){
       if(data.active)localStorage.setItem('kc_active_biz',data.active);
       localStorage.setItem('kc_history_v3',JSON.stringify(data.history||{}));
       loadBusinesses();renderBizUI();loadHistory();
-      showErr('Backup imported — '+data.businesses.length+' businesses restored.');
+      if(cloudOn()){cloudPushBusinesses();var h=data.history||{};Object.keys(h).forEach(function(biz){(h[biz]||[]).forEach(function(rec){cloudPushRun(rec.id,biz,rec);});});audit('import.restored','system','',{businesses:data.businesses.length});}
+      showErr('Backup imported — '+data.businesses.length+' businesses restored.'+(cloudOn()?' Synced to cloud.':''));
     }catch(e){showErr('Import failed: '+e.message);}
     input.value='';
   };
@@ -1464,10 +1571,20 @@ function callAPI(system,content,attempt,model,maxTok){
   attempt=attempt||1;
   model=model||MODELS.specialist;
   maxTok=maxTok||TOKENS.specialist;
-  var key=getKey();if(!key)return Promise.reject(new Error('No API key — open the sidebar'));
-  return fetch('https://api.anthropic.com/v1/messages',{
+  var url,headers;
+  if(cloudOn()){
+    // Signed in: route through the server-side Edge Function proxy (key never in browser)
+    url=SUPA_URL+'/functions/v1/anthropic';
+    headers={'Content-Type':'application/json','Authorization':'Bearer '+session.access_token,'apikey':SUPA_KEY};
+  }else{
+    // Signed out: direct browser call with the locally-stored key (offline / local mode)
+    var key=getKey();if(!key)return Promise.reject(new Error('No API key — open the sidebar, or sign in to use the server-side key'));
+    url='https://api.anthropic.com/v1/messages';
+    headers={'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'};
+  }
+  return fetch(url,{
     method:'POST',
-    headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+    headers:headers,
     body:JSON.stringify({model:model,max_tokens:maxTok,system:system,messages:[{role:'user',content:content}]})
   }).then(function(r){
     // 429 = rate limit. Honor retry-after header if present, else exponential backoff. Up to 5 tries.
@@ -1514,7 +1631,7 @@ function doneState(ok){
 function go(){
   var task=document.getElementById('task').value.trim();
   if(!task||running)return;
-  if(!getKey()){showErr('No API key set. Open the panel at the bottom-left of the sidebar, paste your sk-ant-… key, and click SAVE KEY.');document.getElementById('api-panel').classList.add('open');return;}
+  if(!cloudOn()&&!getKey()){showErr('No API key set. Either sign in (sidebar → SYNC) to use the server-side key, or open the API panel at the bottom-left, paste your sk-ant-… key, and click SAVE KEY.');document.getElementById('api-panel').classList.add('open');return;}
   if(!uploadedDocs.every(function(d){return d.ready;})){showErr('Files still processing. Please wait.');return;}
 
   // In manual mode, validate selection
@@ -1619,14 +1736,17 @@ function saveToHistory(task,summary){
   currentRunId=rid;
   var all=JSON.parse(localStorage.getItem('kc_history_v3')||'{}');
   var hist=all[activeBizId]||[];
-  hist.unshift({
+  var rec={
     id:rid,
     task:task,summary:summary,
     agents:lastAgents.slice(),briefs:JSON.parse(JSON.stringify(lastBriefs)),
     outputs:JSON.parse(JSON.stringify(lastOutputs)),synthesis:lastSynthesis,
     time:new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}),
     date:new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short'})
-  });
+  };
+  hist.unshift(rec);
+  cloudPushRun(rid,activeBizId,rec);
+  audit('run.created','run',rid,{biz:activeBizId,agents:rec.agents});
   if(hist.length>8)hist=hist.slice(0,8);
   all[activeBizId]=hist;
   // quota-safe write: drop oldest runs across businesses until it fits
@@ -1687,13 +1807,15 @@ function saveFollowUp(id,entry){
       if(!trimmed){showErr('History storage full — use EXPORT DATA to back up.');break;}
     }
   }
+  cloudPushRun(id,activeBizId,run);
+  audit('followup.added','run',id,{});
   loadHistory();
 }
 function askFollowUp(){
   if(running)return;
   var q=document.getElementById('followup-input').value.trim();
   if(!q)return;
-  if(!getKey()){showErr('No API key set. Open the panel at the bottom-left of the sidebar and save your key.');return;}
+  if(!cloudOn()&&!getKey()){showErr('No API key set. Sign in (sidebar → SYNC) or save your key in the API panel.');return;}
   var run=findRun(currentRunId);
   if(!run){showErr('Complete or open a run before asking a follow-up.');return;}
   running=true;runCost=0;updateCostMeter();
