@@ -2706,8 +2706,14 @@ function loadReviews(){
   var sec=document.getElementById('mtg-reviews-sec'),wrap=document.getElementById('mtg-reviews');
   if(!wrap)return;
   function render(list){
-    if(!list.length){sec.style.display='none';wrap.innerHTML='';return;}
-    sec.style.display='block';wrap.innerHTML='';
+    sec.style.display='block';
+    if(!list.length){
+      wrap.innerHTML='<div class="mtg-empty" style="text-align:left;line-height:1.7;letter-spacing:1px">'+(cloudOn()
+        ? 'No weekly reviews yet. They generate automatically every Monday 07:00 Lagos for any business with <span style="color:var(--gold-text)">Scheduled Auto-Review</span> switched on — or press <span style="color:var(--gold-text)">◷ WEEKLY REVIEW</span> above to create one now.'
+        : 'Sign in (sidebar → SYNC) to load your weekly reviews. Once signed in, scheduled reviews appear here and can be read or printed.')+'</div>';
+      return;
+    }
+    wrap.innerHTML='';
     list.forEach(function(rec){
       var d=document.createElement('div');d.className='rev-item';
       d.innerHTML='<span class="rev-when">◷ '+escHtml((rec.date||'')+' '+(rec.time||''))+'</span>'
