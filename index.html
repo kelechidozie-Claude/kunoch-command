@@ -245,6 +245,24 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 .cross-chip.on{background:var(--gold-glow);border-color:var(--gold);color:var(--gold)}
 #cross-banner{display:none;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1.5px;color:var(--gold-text);background:var(--surface);border:1px solid var(--gold-dim);border-radius:var(--r);padding:9px 14px;margin-bottom:14px}
 .hist-cross{color:var(--gold-text)}
+/* ── GUIDE VIEW ───────────────────────────────── */
+#guide-view{display:none;max-width:820px}
+#guide-dl{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:22px}
+.guide-dl-btn{text-decoration:none;background:var(--gold-glow);border:1px solid var(--gold-dim);border-radius:var(--r);color:var(--gold);font-family:'DM Mono',monospace;font-size:10px;letter-spacing:1.5px;padding:11px 18px;transition:all .2s}
+.guide-dl-btn:hover{background:var(--gold-dim);border-color:var(--gold)}
+.gsec{background:var(--surface);border:1px solid var(--border);border-left:2px solid var(--gold);border-radius:var(--r);padding:18px 22px;margin-bottom:14px}
+.gsec h3{font-family:'Playfair Display',serif;font-size:16px;color:var(--gold-text);margin-bottom:10px;font-weight:600}
+.gsec p{font-size:13.5px;color:var(--text-dim);line-height:1.75;margin-bottom:8px}
+.gsec p:last-child{margin-bottom:0}
+.gsec b{color:var(--text);font-weight:600}
+.gsec i{color:var(--text-dim);font-style:italic}
+.gsec .gold{color:var(--gold-text)}
+.gsec ol,.gsec ul{margin:8px 0 4px 2px;padding-left:0;list-style:none;counter-reset:g}
+.gsec ol li{position:relative;padding-left:26px;margin-bottom:8px;font-size:13.5px;color:var(--text-dim);line-height:1.7;counter-increment:g}
+.gsec ol li::before{content:counter(g);position:absolute;left:0;top:0;width:17px;height:17px;border:1px solid var(--gold-dim);border-radius:50%;color:var(--gold-text);font-family:'DM Mono',monospace;font-size:9px;display:flex;align-items:center;justify-content:center}
+.gsec ul li{position:relative;padding-left:16px;margin-bottom:8px;font-size:13.5px;color:var(--text-dim);line-height:1.7}
+.gsec ul li::before{content:'›';position:absolute;left:2px;color:var(--gold-dim)}
+.gsec .mono{font-family:'DM Mono',monospace;font-size:11.5px;color:var(--gold-text);background:var(--bg);padding:1px 6px;border-radius:2px;border:1px solid var(--border2)}
 #meetings-view{display:none}
 #mtg-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:12px}
 #mtg-biz{color:var(--gold)}
@@ -472,6 +490,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
     <div id="view-tabs">
       <button class="vtab active" id="vtab-command" onclick="switchView('command')">◆ COMMAND</button>
       <button class="vtab" id="vtab-meetings" onclick="switchView('meetings')">◆ MEETINGS</button>
+      <button class="vtab" id="vtab-guide" onclick="switchView('guide')">◆ GUIDE</button>
     </div>
     <div id="command-view">
     <!-- UPLOAD -->
@@ -641,6 +660,72 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
       </div>
       <div id="mtg-review-card"></div>
       <div id="mtg-list"></div>
+    </div>
+
+    <!-- ── GUIDE VIEW ────────────────────────────── -->
+    <div id="guide-view">
+      <div class="sec-lbl">USER GUIDE</div>
+      <div id="guide-dl">
+        <a class="guide-dl-btn" href="./docs/kunoch-command-manual.pdf" target="_blank">↓ FULL MANUAL (PDF)</a>
+        <a class="guide-dl-btn" href="./docs/kunoch-command-how-to.pdf" target="_blank">↓ QUICK HOW-TO (PDF)</a>
+      </div>
+
+      <div class="gsec"><h3>1 · What this is</h3>
+        <p>Kunoch Command is your family-office command center. You issue a directive; <b>Fredrick</b> (Chief of Staff) selects the right specialists from a roster of seven — CFO, Legal, M&amp;A, PPP, Board, Tech, Research — has each analyse it, then writes one decisive executive briefing. Everything is scoped to the specific business you're working in.</p>
+      </div>
+
+      <div class="gsec"><h3>2 · First-time setup</h3>
+        <p>The app works immediately in <b>local mode</b> (paste your Anthropic key in the sidebar API panel). To sync across phone + desktop and enable meetings and auto-reviews, sign in:</p>
+        <ol>
+          <li><b>Set the server key</b> — in Supabase → Project Settings → Edge Functions → Secrets, add <span class="mono">ANTHROPIC_API_KEY</span> = your <span class="mono">sk-ant-…</span> key.</li>
+          <li><b>Allow the login redirect</b> — Supabase → Authentication → URL Configuration → Site URL and Redirect URLs = <span class="mono">https://kelechidozie-claude.github.io/kunoch-command/</span> (add the <span class="mono">/**</span> wildcard too).</li>
+          <li><b>Sign in</b> — sidebar → SYNC panel → your email → SEND MAGIC LINK → click the link. Repeat on your phone with the same email to share one dataset.</li>
+        </ol>
+      </div>
+
+      <div class="gsec"><h3>3 · Issuing a directive</h3>
+        <ol>
+          <li>Pick the active business (top-left switcher).</li>
+          <li>Optionally drop documents (PDF, Word, Excel, images…) for Fredrick to analyse.</li>
+          <li>Choose <b>Scope</b>: <b>Single business</b> or <b>Cross-business</b>.</li>
+          <li>Choose <b>Agent mode</b> (sidebar): <b>AUTO</b> (Fredrick picks the agents) or <b>MANUAL</b> (you tick the agents).</li>
+          <li>Type your directive and press <b>ISSUE</b> (or ⌘/Ctrl + Enter).</li>
+        </ol>
+        <p>Each specialist card shows Fredrick's brief and the analysis; the gold card at the bottom is the executive briefing. Use <b>EXPORT PDF</b> for a letterhead briefing, or <b>COPY</b> on any card.</p>
+      </div>
+
+      <div class="gsec"><h3>4 · Follow-ups</h3>
+        <p>After a run, use <b>CONTINUE THE THREAD</b> under the briefing. Fredrick routes your follow-up to <i>only</i> the relevant specialist(s), builds on the prior conclusions, and stores the exchange inside that run.</p>
+      </div>
+
+      <div class="gsec"><h3>5 · Cross-business directives</h3>
+        <p>Set Scope to <b>Cross-business</b>, tick <b>2+ businesses</b>, and issue. Fredrick briefs the agents on <b>synergies, conflicts, resource contention and sequencing</b> across those businesses. The result is filed under every business involved and badged <span class="gold">◆ N BIZ</span> in history.</p>
+      </div>
+
+      <div class="gsec"><h3>6 · Businesses &amp; profiles</h3>
+        <p>Use <b>+ NEW BUSINESS</b> or <b>⚙ EDIT CURRENT</b>. The profile (positioning, stage, priorities, non-negotiables, brand spec) is injected into every directive for that business, plus the last few decisions as memory. The <b>Scheduled Auto-Review</b> toggle lives here.</p>
+      </div>
+
+      <div class="gsec"><h3>7 · Meetings (MEETINGS tab)</h3>
+        <p>Sign in, then drop a transcript or notes (.vtt/.srt/.txt/Word/PDF/Excel/images). The original is stored securely with a SHA-256 fingerprint and provenance in the audit log; Fredrick normalises it into a structured record (decisions, action items with owner &amp; due, open questions, flags). <b>WEEKLY REVIEW</b> summarises the last 30 days and carries forward open items. <b>Voice audio</b> isn't transcribed yet — upload a text transcript for now.</p>
+      </div>
+
+      <div class="gsec"><h3>8 · Scheduled auto-reviews</h3>
+        <p>Tick <b>Scheduled Auto-Review</b> on any business. Every <b>Monday 07:00 Africa/Lagos</b> a weekly portfolio review is generated from that business's profile + recent meetings and filed into its run history automatically. (Requires the server key to be set.)</p>
+      </div>
+
+      <div class="gsec"><h3>9 · Sync, cost &amp; backup</h3>
+        <p><b>Sync:</b> signed in = data lives in the cloud and every device shares it; signed out = local only. <b>Cost meter</b> (top bar) shows this interaction's spend and month-to-date. <b>Export / Import</b> (sidebar) backs up businesses + history to a JSON file — never your key.</p>
+      </div>
+
+      <div class="gsec"><h3>10 · Troubleshooting</h3>
+        <ul>
+          <li><b>Magic link goes to 127.0.0.1 / localhost</b> — send the link from the live site (not a local copy), delete old link emails, and confirm the Redirect URLs are saved in Supabase.</li>
+          <li><b>"Sign-in rate limit exceeded"</b> — the email sender is throttled; connect your Resend SMTP (Authentication → SMTP) and raise the email rate limit.</li>
+          <li><b>AI call fails when signed in</b> — the <span class="mono">ANTHROPIC_API_KEY</span> secret isn't set in Supabase.</li>
+          <li><b>Rate-limited mid-run</b> — the app retries automatically; wait ~30s and RETRY the card, or raise your Anthropic tier.</li>
+        </ul>
+      </div>
     </div>
   </div>
 </div>
@@ -2343,8 +2428,10 @@ function switchView(v){
   currentView=v;
   document.getElementById('command-view').style.display=(v==='command')?'block':'none';
   document.getElementById('meetings-view').style.display=(v==='meetings')?'block':'none';
+  document.getElementById('guide-view').style.display=(v==='guide')?'block':'none';
   document.getElementById('vtab-command').classList.toggle('active',v==='command');
   document.getElementById('vtab-meetings').classList.toggle('active',v==='meetings');
+  document.getElementById('vtab-guide').classList.toggle('active',v==='guide');
   if(v==='meetings')refreshMeetingsView();
 }
 function setProv(p){
