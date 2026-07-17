@@ -103,7 +103,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 #tb-r{font-family:'DM Mono',monospace;font-size:10px;color:var(--text-muted);letter-spacing:2px}
 #tb-right{display:flex;align-items:center;gap:16px}
 #cost-meter{font-family:'DM Mono',monospace;font-size:10px;color:var(--text-muted);letter-spacing:1.5px;white-space:nowrap}
-#theme-btn{background:transparent;border:1px solid var(--border);border-radius:2px;color:var(--text-muted);font-size:12px;line-height:1;padding:5px 9px;cursor:pointer;transition:all .2s}
+#theme-btn{background:transparent;border:1px solid var(--border);border-radius:2px;color:var(--text-dim);font-family:'DM Mono',monospace;font-size:8px;letter-spacing:1.5px;line-height:1;padding:6px 10px;cursor:pointer;transition:all .2s;white-space:nowrap}
 #theme-btn:hover{border-color:var(--gold-dim);color:var(--gold)}
 #cost-meter .cm-lbl{color:var(--gold-dim)}
 #work{padding:30px 36px;flex:1}
@@ -500,7 +500,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
     </div>
     <div id="tb-right">
       <div id="cost-meter" title="Estimated API spend — this interaction · month-to-date"><span class="cm-lbl">RUN</span> $0.00 · <span class="cm-lbl">MTD</span> $0.00</div>
-      <button id="theme-btn" title="Toggle light / dark mode" onclick="toggleTheme()">☀</button>
+      <button id="theme-btn" title="Toggle light / dark mode" onclick="toggleTheme()">◐ LIGHT</button>
       <div id="tb-r"></div>
     </div>
   </div>
@@ -1716,7 +1716,7 @@ function readTxt(f){return new Promise(function(r,j){var rd=new FileReader();rd.
 function applyTheme(t){
   document.documentElement.classList.toggle('theme-light',t==='light');
   var b=document.getElementById('theme-btn');
-  if(b)b.textContent=(t==='light')?'☾':'☀';
+  if(b)b.textContent=(t==='light')?'◐ DARK':'◐ LIGHT';
 }
 function toggleTheme(){
   var cur=(localStorage.getItem('kc_theme')==='light')?'light':'dark';
