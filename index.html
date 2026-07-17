@@ -328,6 +328,9 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 .mlbl{font-family:'DM Mono',monospace;font-size:9px;color:var(--text-muted);letter-spacing:2px;text-transform:uppercase}
 .minp,.msel,.mtxt{background:var(--bg);border:1px solid var(--border);border-radius:2px;color:var(--text);padding:8px 10px;font-size:11px;font-family:'DM Sans',sans-serif;outline:none;transition:border-color .2s;width:100%}
 .minp:focus,.msel:focus,.mtxt:focus{border-color:var(--gold-dim)}
+.mtoggle{display:flex;align-items:flex-start;gap:10px;background:var(--surface);border:1px solid var(--border);border-left:2px solid var(--gold);border-radius:var(--r);padding:12px 14px;cursor:pointer;font-size:11px;color:var(--text-dim);line-height:1.6}
+.mtoggle input{margin-top:2px;width:15px;height:15px;accent-color:var(--gold);flex-shrink:0;cursor:pointer}
+.mtoggle strong{color:var(--gold-text)}
 .mtxt{resize:vertical;min-height:56px;line-height:1.6}
 .msel{cursor:pointer}
 .mrev{display:flex;gap:6px}
@@ -700,6 +703,12 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
           <div class="mfield mgrid-full">
             <div class="mlbl">Current Challenges</div>
             <textarea class="mtxt" id="f-challenges" placeholder="Active pain points, blockers, or open questions"></textarea>
+          </div>
+          <div class="mfield mgrid-full">
+            <div class="mlbl">Scheduled Auto-Review</div>
+            <label class="mtoggle"><input type="checkbox" id="f-autoreview" />
+              <span>Generate a weekly portfolio review every <strong>Monday 07:00 Africa/Lagos (WAT)</strong> — built from this profile and the last 30 days of meetings, written into this business's run history. Requires sign-in.</span>
+            </label>
           </div>
         </div>
       </div>
@@ -1192,6 +1201,7 @@ function openBizModal(target){
     var txt=document.getElementById('f-'+c);
     picker.value=txt.value||'#C9A84C';
   });
+  document.getElementById('f-autoreview').checked=biz?!!biz.auto_review:false;
   switchTab('profile');
   document.getElementById('modal-backdrop').classList.add('open');
 }
@@ -1231,7 +1241,8 @@ function saveBusiness(){
     tone:document.getElementById('f-tone').value.trim(),
     values:document.getElementById('f-values').value.trim(),
     dos:document.getElementById('f-dos').value.trim(),
-    donts:document.getElementById('f-donts').value.trim()
+    donts:document.getElementById('f-donts').value.trim(),
+    auto_review:document.getElementById('f-autoreview').checked
   };
   if(editingBizId){
     var idx=businesses.findIndex(function(b){return b.id===editingBizId;});
