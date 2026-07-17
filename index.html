@@ -651,10 +651,10 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
           <button class="prov-btn" id="prov-notes" onclick="setProv('imported_notes')">IMPORTED NOTES</button>
         </div>
         <div id="mtg-dropzone" ondragover="mtgOver(event)" ondragleave="mtgLeave()" ondrop="mtgDrop(event)">
-          <input type="file" id="mtg-fileinput" multiple accept=".vtt,.srt,.txt,.md,.csv,.docx,.doc,.pdf,.xlsx,.xls,.pptx,.png,.jpg,.jpeg,.webp,.gif" onchange="mtgFilesChosen(this.files)" />
+          <input type="file" id="mtg-fileinput" multiple accept=".vtt,.srt,.txt,.md,.csv,.docx,.doc,.pdf,.xlsx,.xls,.pptx,.png,.jpg,.jpeg,.webp,.gif,.mp3,.m4a,.wav,.aac,.ogg,.flac,.mp4,.mov,.m4v" onchange="mtgFilesChosen(this.files)" />
           <div id="mtg-dz-icon">⬆</div>
-          <div id="mtg-dz-title">DROP TRANSCRIPT OR NOTES</div>
-          <div id="mtg-dz-sub">VTT · SRT · TXT · Word · PDF · Excel · notes / images — Fredrick normalises into a structured, searchable record</div>
+          <div id="mtg-dz-title">DROP TRANSCRIPT, NOTES, OR AUDIO</div>
+          <div id="mtg-dz-sub">VTT · SRT · TXT · Word · PDF · Excel · notes / images · <b>audio</b> (auto-transcribed, diarised) — Fredrick normalises into a structured record</div>
         </div>
         <div id="mtg-status"></div>
       </div>
@@ -707,11 +707,11 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
       </div>
 
       <div class="gsec"><h3>7 · Meetings (MEETINGS tab)</h3>
-        <p>Sign in, then drop a transcript or notes (.vtt/.srt/.txt/Word/PDF/Excel/images). The original is stored securely with a SHA-256 fingerprint and provenance in the audit log; Fredrick normalises it into a structured record (decisions, action items with owner &amp; due, open questions, flags). <b>WEEKLY REVIEW</b> summarises the last 30 days and carries forward open items. <b>Voice audio</b> isn't transcribed yet — upload a text transcript for now.</p>
+        <p>Sign in, then drop a transcript or notes (.vtt/.srt/.txt/Word/PDF/Excel/images). The original is stored securely with a SHA-256 fingerprint and provenance in the audit log; Fredrick normalises it into a structured record (decisions, action items with owner &amp; due, open questions, flags). <b>WEEKLY REVIEW</b> summarises the last 30 days and carries forward open items. <b>Voice audio</b> (mp3/m4a/wav/mp4…) is <b>auto-transcribed with speaker diarisation</b> — set a <span class="mono">DEEPGRAM_API_KEY</span> secret on the server to enable it.</p>
       </div>
 
       <div class="gsec"><h3>8 · Scheduled auto-reviews</h3>
-        <p>Tick <b>Scheduled Auto-Review</b> on any business. Every <b>Monday 07:00 Africa/Lagos</b> a weekly portfolio review is generated from that business's profile + recent meetings and filed into its run history automatically. (Requires the server key to be set.)</p>
+        <p>Tick <b>Scheduled Auto-Review</b> on any business. Every <b>Monday 07:00 Africa/Lagos</b> a weekly portfolio review is generated from that business's profile + recent meetings and filed into its run history automatically. Tick <b>Also email me</b> to have each review delivered to your inbox (needs a <span class="mono">RESEND_API_KEY</span> secret and a verified sender address set on the server). Requires the Anthropic server key.</p>
       </div>
 
       <div class="gsec"><h3>9 · Sync, cost &amp; backup</h3>
@@ -822,6 +822,9 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
             <div class="mlbl">Scheduled Auto-Review</div>
             <label class="mtoggle"><input type="checkbox" id="f-autoreview" />
               <span>Generate a weekly portfolio review every <strong>Monday 07:00 Africa/Lagos (WAT)</strong> — built from this profile and the last 30 days of meetings, written into this business's run history. Requires sign-in.</span>
+            </label>
+            <label class="mtoggle" style="margin-top:8px"><input type="checkbox" id="f-autoreview-email" />
+              <span>Also <strong>email me</strong> each weekly review for this business. Requires a Resend key and sender address configured on the server (see the Guide).</span>
             </label>
           </div>
         </div>
@@ -1352,6 +1355,7 @@ function openBizModal(target){
     picker.value=txt.value||'#C9A84C';
   });
   document.getElementById('f-autoreview').checked=biz?!!biz.auto_review:false;
+  document.getElementById('f-autoreview-email').checked=biz?!!biz.auto_review_email:false;
   switchTab('profile');
   document.getElementById('modal-backdrop').classList.add('open');
 }
@@ -1392,7 +1396,8 @@ function saveBusiness(){
     values:document.getElementById('f-values').value.trim(),
     dos:document.getElementById('f-dos').value.trim(),
     donts:document.getElementById('f-donts').value.trim(),
-    auto_review:document.getElementById('f-autoreview').checked
+    auto_review:document.getElementById('f-autoreview').checked,
+    auto_review_email:document.getElementById('f-autoreview-email').checked
   };
   if(editingBizId){
     var idx=businesses.findIndex(function(b){return b.id===editingBizId;});
@@ -2483,15 +2488,24 @@ function extractBlocks(file){
   });
 }
 
+function transcribeAudio(path){
+  return fetch(SUPA_URL+'/functions/v1/transcribe',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token,'apikey':SUPA_KEY},
+    body:JSON.stringify({storage_path:path})
+  }).then(function(r){return r.json().then(function(j){
+    if(!r.ok||(j&&j.error)){throw new Error((j&&j.error&&j.error.message)||('transcribe failed ('+r.status+')'));}
+    return j.transcript||'';
+  });});
+}
+
 function ingestMeeting(file){
   return new Promise(function(resolve,reject){
     if(mtgBusy){reject();return;}
     var ext=file.name.split('.').pop().toLowerCase();
-    if(AUDIO_EXT.indexOf(ext)>=0){
-      mtgStatus('Audio transcription (Deepgram / AssemblyAI) is not yet configured — upload a text transcript (.vtt/.srt/.txt) or notes for now.');
-      reject();return;
-    }
-    if(file.size>20*1024*1024){showErr(file.name+': file too large (max 20MB).');reject();return;}
+    var isAudio=AUDIO_EXT.indexOf(ext)>=0;
+    var limit=(isAudio?50:20)*1024*1024;
+    if(file.size>limit){showErr(file.name+': file too large (max '+(isAudio?50:20)+'MB).');reject();return;}
     mtgBusy=true;runCost=0;updateCostMeter();
     mtgStatus('Reading '+file.name+'…');
     var meetingId='mtg_'+Date.now().toString(36);
@@ -2506,11 +2520,23 @@ function ingestMeeting(file){
         return SB.storage.from('meeting-files').upload(storagePath,file,{contentType:file.type||'application/octet-stream',upsert:false});
       })
       .then(function(up){
-        if(up&&up.error)console.warn('storage:',up.error.message); // record even if storage hiccups; audit still fires
+        if(up&&up.error){
+          // audio must actually upload (Deepgram fetches it from storage); docs can degrade gracefully
+          if(isAudio)throw new Error('storage upload failed: '+up.error.message);
+          console.warn('storage:',up.error.message);
+        }
+        if(isAudio){
+          mtgStatus('Transcribing audio (Deepgram, diarised)…');
+          return transcribeAudio(storagePath).then(function(tr){
+            if(!tr||!tr.trim())throw new Error('empty transcript');
+            return [{type:'text',text:'[AUDIO TRANSCRIPT · '+file.name+']\n\n'+tr}];
+          });
+        }
         mtgStatus('Fredrick normalising the record…');
         return extractBlocks(file);
       })
       .then(function(blocks){
+        if(isAudio)mtgStatus('Fredrick normalising the record…');
         var biz=getActiveBiz();
         var instr=(biz?formatBizContext(biz)+'\n\n':'')
           +'PROVENANCE: '+(mtgProv==='own_transcript'?'own recorded/transcribed meeting':'imported third-party notes')
@@ -2521,7 +2547,8 @@ function ingestMeeting(file){
       .then(function(raw){
         var rec;try{rec=extractJSON(raw);}catch(e){rec={summary:'(could not parse — raw output stored)',_raw:raw.slice(0,2000),platform:'Unknown',attendees:[],decisions:[],action_items:[],open_questions:[],flags:[]};}
         var data={
-          kind:'meeting',filename:file.name,sha256:hashHex,storage_path:storagePath,
+          kind:'meeting',filename:file.name,sha256:hashHex,storage_path:storagePath,source_type:(isAudio?'audio':'file'),
+          transcript:(isAudio&&blocks&&blocks[0]?blocks[0].text:null),
           provenance:mtgProv,uploaded_at:new Date().toISOString(),uploader:(session&&session.user?session.user.email:''),
           meeting_date:rec.meeting_date||null,platform:rec.platform||'Unknown',attendees:rec.attendees||[],
           agenda:rec.agenda||null,decisions:rec.decisions||[],action_items:rec.action_items||[],
@@ -2561,7 +2588,7 @@ function meetingCard(m){
   var attendees=(d.attendees||[]).join(' · ');
   var provOwn=d.provenance==='own_transcript';
   var h='<div class="mcard-bar"></div><div class="mcard-inner">';
-  h+='<div class="mcard-top"><div><div class="mcard-plat">'+escHtml((d.platform||'Unknown').toUpperCase())+(d.meeting_date?' · '+escHtml(d.meeting_date):'')+'</div>'
+  h+='<div class="mcard-top"><div><div class="mcard-plat">'+escHtml((d.platform||'Unknown').toUpperCase())+(d.meeting_date?' · '+escHtml(d.meeting_date):'')+(d.source_type==='audio'?' · <span style="color:var(--tech)">◉ AUDIO</span>':'')+'</div>'
     +'<div class="mcard-meta">'+escHtml(d.filename||'')+(attendees?' · '+escHtml(attendees):'')+'</div></div>'
     +'<span class="mcard-prov'+(provOwn?' own':'')+'">'+(provOwn?'OWN TRANSCRIPT':'IMPORTED NOTES')+'</span></div>';
   if(d.summary)h+='<div class="mcard-sum">'+escHtml(d.summary)+'</div>';
