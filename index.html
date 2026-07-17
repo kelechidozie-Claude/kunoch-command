@@ -1958,7 +1958,12 @@ function callAPI(system,content,attempt,model,maxTok){
     return r.json();
   }).then(function(d){
     if(d&&d.usage)recordCost(model,d.usage);
-    return d&&d.content&&d.content[0]?d.content[0].text:'';
+    // Find the text block. Fable 5 (orchestrator) always returns a thinking block first,
+    // so content[0] is not the text — scan for the first type:'text' block.
+    if(d&&d.content&&d.content.length){
+      for(var ci=0;ci<d.content.length;ci++){var bl=d.content[ci];if(bl&&bl.type==='text'&&bl.text)return bl.text;}
+    }
+    return '';
   });
 }
 
