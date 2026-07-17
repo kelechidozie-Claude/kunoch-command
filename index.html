@@ -291,6 +291,14 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 .mrv-body li{position:relative;padding-left:16px;margin-bottom:6px}
 .mrv-body ul li::before{content:'›';position:absolute;left:2px;color:var(--gold-dim)}
 .mrv-body ol{margin:8px 0 8px 20px}.mrv-body p{margin-bottom:10px}
+.mrv-foot{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;padding-top:12px;border-top:1px solid var(--border)}
+#mtg-reviews-sec{display:none}
+#mtg-reviews{display:flex;flex-direction:column;gap:8px}
+.rev-item{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--border);border-left:2px solid var(--gold);border-radius:var(--r);padding:12px 16px;cursor:pointer;transition:all .2s}
+.rev-item:hover{border-color:var(--gold-dim);background:var(--surface2)}
+.rev-when{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:1px;color:var(--gold-text);white-space:nowrap}
+.rev-sum{flex:1;font-size:12.5px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rev-open{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1.5px;color:var(--gold);white-space:nowrap}
 #mtg-list{margin-top:22px;display:flex;flex-direction:column;gap:14px}
 .mtg-empty{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--text-muted);padding:20px 0;text-align:center}
 .mcard{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
@@ -658,6 +666,10 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
         </div>
         <div id="mtg-status"></div>
       </div>
+      <div id="mtg-reviews-sec">
+        <div class="sec-lbl" style="margin-top:22px">SCHEDULED WEEKLY REVIEWS</div>
+        <div id="mtg-reviews"></div>
+      </div>
       <div id="mtg-review-card"></div>
       <div id="mtg-list"></div>
     </div>
@@ -711,7 +723,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
       </div>
 
       <div class="gsec"><h3>8 · Scheduled auto-reviews</h3>
-        <p>Tick <b>Scheduled Auto-Review</b> on any business. Every <b>Monday 07:00 Africa/Lagos</b> a weekly portfolio review is generated from that business's profile + recent meetings and filed into its run history automatically. Tick <b>Also email me</b> to have each review delivered to your inbox (needs a <span class="mono">RESEND_API_KEY</span> secret and a verified sender address set on the server). Requires the Anthropic server key.</p>
+        <p>Tick <b>Scheduled Auto-Review</b> on any business. Every <b>Monday 07:00 Africa/Lagos</b> a weekly portfolio review is generated from that business's profile + recent meetings and filed into its run history automatically. Tick <b>Also email me</b> to have each review delivered to your inbox (needs a <span class="mono">RESEND_API_KEY</span> secret and a verified sender address set on the server). Requires the Anthropic server key. Every review is also always available in the app under <b>MEETINGS → Scheduled Weekly Reviews</b> — click <b>READ</b> to open it, then <b>COPY</b> or <b>Print / Save PDF</b> (so you never depend on email).</p>
       </div>
 
       <div class="gsec"><h3>9 · Sync, cost &amp; backup</h3>
@@ -2258,8 +2270,9 @@ function loadHistory(){
     var d=document.createElement('div');d.className='hist-item';
     var meta=(h.date?h.date+' · ':'')+h.time+' · '+escHtml((h.summary||'').slice(0,40));
     var crossTag=h.cross?' · <span class="hist-cross">◆ '+((h.biz_ids&&h.biz_ids.length)||2)+' BIZ</span>':'';
+    var revTag=(h.kind==='auto_review')?' · <span class="hist-cross">◷ WEEKLY</span>':'';
     d.innerHTML='<div class="hist-task">'+escHtml(h.task.slice(0,60))+(h.task.length>60?'…':'')+'</div>'
-      +'<div class="hist-meta">'+meta+crossTag+(h.outputs?' · <span style="color:var(--gold)">OPEN ▸</span>':'')+'</div>';
+      +'<div class="hist-meta">'+meta+crossTag+revTag+(h.outputs?' · <span style="color:var(--gold)">OPEN ▸</span>':'')+'</div>';
     d.onclick=function(){
       if(h.outputs){openRun(h);}
       else{document.getElementById('task').value=h.task;document.getElementById('task').focus();}
@@ -2451,7 +2464,8 @@ function refreshMeetingsView(){
   document.getElementById('mtg-gate').style.display=signedIn?'none':'block';
   document.getElementById('mtg-intake').style.display=signedIn?'block':'none';
   document.getElementById('mtg-review-btn').style.display=signedIn?'inline-block':'none';
-  document.getElementById('mtg-review-card').style.display='none';
+  document.getElementById('mtg-review-card').style.display='none';currentReview=null;
+  loadReviews();
   if(signedIn)loadMeetings(); else document.getElementById('mtg-list').innerHTML='';
 }
 function mtgStatus(t,show){var el=document.getElementById('mtg-status');el.textContent=t||'';el.style.display=(show===false||!t)?'none':'block';}
@@ -2641,12 +2655,77 @@ function weeklyReview(){
     var biz=getActiveBiz();
     var input=(biz?formatBizContext(biz)+'\n\n':'')+'RECENT MEETING RECORDS (last 30 days; [THIS WEEK] marks the current 7-day window):\n\n'+compiled;
     callAPI(SP.weeklyReview,input,1,MODELS.orchestrator,TOKENS.synthesis).then(function(out){
-      document.getElementById('mrv-body').innerHTML=mdToHtml(out);
+      renderReviewCard('Weekly Review — '+((biz&&biz.name)||''),out);
       audit('review.generated','review',activeBizId,{meetings:rows.length});
       mtgBusy=false;updateCostMeter();
-      card.scrollIntoView({behavior:'smooth',block:'start'});
     }).catch(function(e){document.getElementById('mrv-body').textContent='Review failed: '+e.message;mtgBusy=false;});
   });
+}
+
+/* Shared review viewer — used by the on-demand button and by opening a scheduled review */
+var currentReview=null;
+function renderReviewCard(title,text){
+  currentReview={title:title,text:text||''};
+  var card=document.getElementById('mtg-review-card');
+  card.style.display='block';
+  card.innerHTML='<div class="mrv-hd"><div class="mrv-ttl">'+escHtml(title)+'</div><div class="mrv-lbl">FREDRICK</div></div>'
+    +'<div class="mrv-body">'+mdToHtml(text||'')+'</div>'
+    +'<div class="mrv-foot"><button class="copy-btn" onclick="copyReview(this)">COPY</button><button class="copy-btn" onclick="printReview()">↓ PRINT / SAVE PDF</button></div>';
+  card.scrollIntoView({behavior:'smooth',block:'start'});
+}
+function copyReview(btn){
+  if(!currentReview)return;
+  navigator.clipboard.writeText(currentReview.text||'').then(function(){if(btn){btn.classList.add('copied');btn.textContent='COPIED';setTimeout(function(){btn.classList.remove('copied');btn.textContent='COPY';},1500);}});
+}
+function printReview(){
+  if(!currentReview)return;
+  var bizName=(getActiveBiz()&&getActiveBiz().name)||'';
+  var now=new Date();
+  var ds=now.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  var h='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>'+escHtml(currentReview.title)+'</title>'
+    +'<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">'
+    +'<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:"DM Sans",sans-serif;color:#23272F;font-size:11pt;line-height:1.65;padding:0;-webkit-print-color-adjust:exact}'
+    +'.lh{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2.5px solid #9A7830;padding-bottom:14px;margin-bottom:22px}'
+    +'.logo{font-family:"Playfair Display",serif;font-size:24pt;color:#9A7830;font-weight:700}.sub{font-family:"DM Mono",monospace;font-size:6.5pt;color:#9AA0AB;letter-spacing:3px;margin-top:5px}'
+    +'.rhs{text-align:right;font-family:"DM Mono",monospace;font-size:7pt;color:#9AA0AB;letter-spacing:1.5px;line-height:1.9}.rhs .biz{color:#9A7830;font-size:9pt;letter-spacing:2px}'
+    +'.ttl{font-family:"Playfair Display",serif;font-size:17pt;color:#1A1D24;margin-bottom:16px}'
+    +'h4{font-family:"DM Mono",monospace;font-size:8.5pt;letter-spacing:1.5px;color:#9A7830;text-transform:uppercase;margin:16px 0 7px;font-weight:600}h4:first-child{margin-top:0}'
+    +'p{margin-bottom:9px;color:#2A2E36}strong{color:#1A1D24}ul{margin:7px 0 9px 2px;list-style:none}li{margin-bottom:5px;padding-left:15px;position:relative}ul li::before{content:"›";position:absolute;left:2px;color:#9A7830;font-weight:700}ol{margin:7px 0 9px 20px}'
+    +'.foot{margin-top:26px;border-top:1px solid #EAEAEA;padding-top:10px;font-family:"DM Mono",monospace;font-size:6.5pt;color:#BFC4CC;letter-spacing:1.5px;display:flex;justify-content:space-between}@page{margin:16mm}</style></head><body>'
+    +'<div class="lh"><div><div class="logo">Kunoch Command</div><div class="sub">FAMILY OFFICE · EXECUTIVE INTELLIGENCE · CONFIDENTIAL</div></div>'
+    +'<div class="rhs">'+(bizName?'<div class="biz">'+escHtml(bizName.toUpperCase())+'</div>':'')+'<div>'+ds+'</div></div></div>'
+    +'<div class="ttl">'+escHtml(currentReview.title)+'</div>'+mdToHtml(currentReview.text)
+    +'<div class="foot"><span>KUNOCH COMMAND · CONFIDENTIAL</span><span>WEEKLY REVIEW</span></div></body></html>';
+  var w=window.open('','_blank','width=860,height=720');
+  if(w&&w.document){w.document.write(h);w.document.close();w.onload=function(){w.focus();setTimeout(function(){w.print();},400);};}
+  else{showErr('Popups are blocked — allow popups to print, or use COPY.');}
+}
+
+/* List the scheduled (and any saved) weekly reviews for the active business */
+function loadReviews(){
+  var sec=document.getElementById('mtg-reviews-sec'),wrap=document.getElementById('mtg-reviews');
+  if(!wrap)return;
+  function render(list){
+    if(!list.length){sec.style.display='none';wrap.innerHTML='';return;}
+    sec.style.display='block';wrap.innerHTML='';
+    list.forEach(function(rec){
+      var d=document.createElement('div');d.className='rev-item';
+      d.innerHTML='<span class="rev-when">◷ '+escHtml((rec.date||'')+' '+(rec.time||''))+'</span>'
+        +'<span class="rev-sum">'+escHtml((rec.summary||rec.task||'Weekly review').slice(0,64))+'</span>'
+        +'<span class="rev-open">READ ▸</span>';
+      d.onclick=function(){renderReviewCard('Weekly Review — '+((getActiveBiz()&&getActiveBiz().name)||'')+' · '+(rec.date||''),rec.synthesis||'');};
+      wrap.appendChild(d);
+    });
+  }
+  if(cloudOn()){
+    SB.from('runs').select('run_id,data,created_at').eq('biz_id',activeBizId).order('created_at',{ascending:false}).then(function(r){
+      var list=(((r&&r.data))||[]).map(function(x){var dd=x.data||{};dd.id=x.run_id;return dd;}).filter(function(dd){return dd.kind==='auto_review';});
+      render(list);
+    }).catch(function(){render([]);});
+  }else{
+    var all={};try{all=JSON.parse(localStorage.getItem('kc_history_v3')||'{}');}catch(e){}
+    render(((all[activeBizId])||[]).filter(function(dd){return dd.kind==='auto_review';}));
+  }
 }
 </script>
 </body>
