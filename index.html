@@ -23,6 +23,15 @@
   --r:3px;
   --cfo:#34D399;--legal:#F87171;--ma:#A78BFA;--ppp:#FB923C;--board:#D4AF37;--tech:#4FC3F7;--research:#F472B6;
 }
+/* ── LIGHT MODE (optional; dark is the default identity) ── */
+:root.theme-light{
+  --bg:#F4F1EA;--surface:#FFFFFF;--surface2:#FAF8F2;--surface3:#F0ECE1;
+  --border:#E6E1D4;--border2:#D6CFBD;
+  --text:#1A1D24;--text-dim:#4E5560;--text-muted:#7C7768;
+  --gold:#9A7830;--gold-dim:#9A783055;--gold-glow:#9A78300D;--gold-text:#8A6A28;
+  --cfo:#0E9E6E;--legal:#DC2626;--ma:#7C3AED;--ppp:#D96C10;--board:#A67C1A;--tech:#0E86C7;--research:#DB2777;
+}
+:root.theme-light body::before{opacity:.012}
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
 body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");pointer-events:none;z-index:0}
@@ -94,6 +103,8 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 #tb-r{font-family:'DM Mono',monospace;font-size:10px;color:var(--text-muted);letter-spacing:2px}
 #tb-right{display:flex;align-items:center;gap:16px}
 #cost-meter{font-family:'DM Mono',monospace;font-size:10px;color:var(--text-muted);letter-spacing:1.5px;white-space:nowrap}
+#theme-btn{background:transparent;border:1px solid var(--border);border-radius:2px;color:var(--text-muted);font-size:12px;line-height:1;padding:5px 9px;cursor:pointer;transition:all .2s}
+#theme-btn:hover{border-color:var(--gold-dim);color:var(--gold)}
 #cost-meter .cm-lbl{color:var(--gold-dim)}
 #work{padding:30px 36px;flex:1}
 .sec-lbl{font-family:'DM Mono',monospace;font-size:9px;color:var(--text-muted);letter-spacing:4px;text-transform:uppercase;margin-bottom:10px}
@@ -489,6 +500,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
     </div>
     <div id="tb-right">
       <div id="cost-meter" title="Estimated API spend — this interaction · month-to-date"><span class="cm-lbl">RUN</span> $0.00 · <span class="cm-lbl">MTD</span> $0.00</div>
+      <button id="theme-btn" title="Toggle light / dark mode" onclick="toggleTheme()">☀</button>
       <div id="tb-r"></div>
     </div>
   </div>
@@ -1700,8 +1712,22 @@ function readB64(f){return new Promise(function(r,j){var rd=new FileReader();rd.
 function readAB(f){return new Promise(function(r,j){var rd=new FileReader();rd.onload=function(e){r(e.target.result);};rd.onerror=j;rd.readAsArrayBuffer(f);});}
 function readTxt(f){return new Promise(function(r,j){var rd=new FileReader();rd.onload=function(e){r(e.target.result);};rd.onerror=j;rd.readAsText(f);});}
 
+/* ── THEME (dark default; light optional, per-device) ── */
+function applyTheme(t){
+  document.documentElement.classList.toggle('theme-light',t==='light');
+  var b=document.getElementById('theme-btn');
+  if(b)b.textContent=(t==='light')?'☾':'☀';
+}
+function toggleTheme(){
+  var cur=(localStorage.getItem('kc_theme')==='light')?'light':'dark';
+  var next=(cur==='light')?'dark':'light';
+  try{localStorage.setItem('kc_theme',next);}catch(e){}
+  applyTheme(next);
+}
+
 /* ── INIT (API key + businesses + history) ───── */
 window.onload=function(){
+  applyTheme(localStorage.getItem('kc_theme')==='light'?'light':'dark');
   var s=null;
   try{s=localStorage.getItem('kc_api_key');}catch(e){}
   if(s){document.getElementById('apikey').value=s;setApiOk(true);}
