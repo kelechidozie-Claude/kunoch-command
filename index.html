@@ -231,6 +231,20 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 .vtab{background:transparent;border:1px solid var(--border);border-radius:2px;color:var(--text-muted);font-family:'DM Mono',monospace;font-size:9px;letter-spacing:2px;padding:9px 18px;cursor:pointer;transition:all .2s}
 .vtab:hover{border-color:var(--gold-dim);color:var(--gold)}
 .vtab.active{background:var(--gold-glow);border-color:var(--gold-dim);color:var(--gold)}
+/* ── DIRECTIVE SCOPE / CROSS-BUSINESS ─────────── */
+#scope-sec{margin-bottom:20px}
+#scope-toggle{display:flex;gap:8px;margin-bottom:10px}
+.scope-btn{background:transparent;border:1px solid var(--border);border-radius:2px;color:var(--text-muted);font-family:'DM Mono',monospace;font-size:9px;letter-spacing:2px;padding:8px 16px;cursor:pointer;transition:all .2s}
+.scope-btn:hover{border-color:var(--gold-dim);color:var(--gold)}
+.scope-btn.active{background:var(--gold-glow);border-color:var(--gold-dim);color:var(--gold)}
+#cross-pick{display:none;background:var(--surface);border:1px solid var(--border);border-left:2px solid var(--gold);border-radius:var(--r);padding:14px 16px}
+.cross-hint{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;color:var(--text-dim);margin-bottom:10px;line-height:1.6}
+#cross-chips{display:flex;flex-wrap:wrap;gap:7px}
+.cross-chip{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;padding:6px 12px;border:1px solid var(--border2);border-radius:20px;color:var(--text-dim);cursor:pointer;transition:all .2s;user-select:none}
+.cross-chip:hover{border-color:var(--gold-dim);color:var(--gold)}
+.cross-chip.on{background:var(--gold-glow);border-color:var(--gold);color:var(--gold)}
+#cross-banner{display:none;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1.5px;color:var(--gold-text);background:var(--surface);border:1px solid var(--gold-dim);border-radius:var(--r);padding:9px 14px;margin-bottom:14px}
+.hist-cross{color:var(--gold-text)}
 #meetings-view{display:none}
 #mtg-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:12px}
 #mtg-biz{color:var(--gold)}
@@ -473,6 +487,19 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
       <div id="file-pills"></div>
     </div>
 
+    <!-- SCOPE -->
+    <div id="scope-sec">
+      <div class="sec-lbl">DIRECTIVE SCOPE</div>
+      <div id="scope-toggle">
+        <button class="scope-btn active" id="scope-single" onclick="setScope('single')">SINGLE BUSINESS</button>
+        <button class="scope-btn" id="scope-cross" onclick="setScope('cross')">CROSS-BUSINESS</button>
+      </div>
+      <div id="cross-pick">
+        <div class="cross-hint">Select 2+ businesses — Fredrick briefs the agents on synergy &amp; conflict across them, and the result is filed under every business involved.</div>
+        <div id="cross-chips"></div>
+      </div>
+    </div>
+
     <!-- DIRECTIVE -->
     <div id="dir-sec">
       <div class="sec-lbl">DIRECTIVE TO FREDRICK</div>
@@ -495,6 +522,8 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
         <div id="f-sum"></div>
         <div id="f-tags"></div>
       </div>
+
+      <div id="cross-banner"></div>
 
       <div class="sec-lbl" id="agents-lbl">SPECIALIST OUTPUTS</div>
       <div id="out-grid">
@@ -1014,6 +1043,39 @@ weeklyReview:[
   "[1-3 specific asks or decisions only he can make.]",
   "",
   "Max 380 words. Board-level tone. If there are no meetings in the window, say so plainly and stop."
+].join("\n"),
+
+fredrickCross:[
+  "You are Fredrick, Chief of Staff to Kelechi Dozie.",CTX,
+  "This is a CROSS-BUSINESS directive spanning 2+ businesses in the Kunoch portfolio — ALL their profiles are prepended.",
+  "Brief the specialists to analyse ACROSS the businesses: synergies to exploit, conflicts and resource contention to resolve, sequencing, and portfolio-level trade-offs. Every brief must name the specific businesses it concerns and ask for cross-business, not single-business, analysis.",
+  "AVAILABLE AGENTS: cfo, legal, ma, ppp, board, tech, research. Select 2-4 most relevant to a PORTFOLIO-level analysis (board and ma are often central to cross-business questions).",
+  "Respond ONLY in raw JSON (no markdown fences):",
+  '{"task_summary":"one sentence naming the portfolio question","agents_selected":["id1","id2"],"briefs":{"id1":"cross-business brief","id2":"cross-business brief"}}'
+].join("\n"),
+
+synthesisCross:[
+  "You are Fredrick, Chief of Staff to Kelechi Dozie.",CTX,
+  "This CROSS-BUSINESS directive spans 2+ businesses (all profiles prepended). Synthesise the specialist outputs into one portfolio-level executive briefing.",
+  "",
+  "Format exactly:",
+  "",
+  "1. PORTFOLIO SITUATION",
+  "[2-3 sentences on the cross-business picture — how these businesses relate on this question.]",
+  "",
+  "2. SYNERGIES",
+  "[Bullets: concrete synergies between the named businesses, with the mechanism and who benefits.]",
+  "",
+  "3. CONFLICTS & CONTENTION",
+  "[Bullets: conflicts, resource contention (capital, people, attention), or strategic tension between the named businesses.]",
+  "",
+  "4. RECOMMENDATION",
+  "[One clear portfolio-level recommendation: which business leads, which follows, and in what sequence. No hedging.]",
+  "",
+  "5. NEXT STEPS",
+  "[Exactly 3 numbered actions, each tagged to the specific business(es) it concerns.]",
+  "",
+  "Max 420 words. Board-level tone. No filler."
 ].join("\n")
 };
 
@@ -1149,7 +1211,8 @@ function renderBizUI(){
   var biz=getActiveBiz();
   if(!biz)return;
   document.getElementById('biz-btn-name').textContent=biz.name.toUpperCase();
-  document.getElementById('biz-ctx-name').textContent=biz.name.toUpperCase();
+  updateScopeNote();
+  if(dirScope==='cross')renderCrossChips();
   var list=document.getElementById('biz-menu-list');
   list.innerHTML='';
   businesses.forEach(function(b){
@@ -1354,6 +1417,65 @@ function formatMemory(bizId){
 
 var running=false,lastTask='',lastOutputs={},lastBriefs={},lastSummary='',lastSynthesis='',lastAgents=[];
 var uploadedDocs=[],processingCount=0,currentPlan=null,selMode='auto';
+/* ── DIRECTIVE SCOPE (Phase 6: cross-business) ── */
+var dirScope='single',crossSel=[],runIsCross=false,runScopeIds=null;
+function setScope(s){
+  dirScope=s;
+  document.getElementById('scope-single').classList.toggle('active',s==='single');
+  document.getElementById('scope-cross').classList.toggle('active',s==='cross');
+  document.getElementById('cross-pick').style.display=(s==='cross')?'block':'none';
+  if(s==='cross')renderCrossChips();
+  updateScopeNote();updateRunBtn();
+}
+function renderCrossChips(){
+  var wrap=document.getElementById('cross-chips');if(!wrap)return;
+  crossSel=crossSel.filter(function(id){return businesses.some(function(b){return b.id===id;});});
+  wrap.innerHTML='';
+  businesses.forEach(function(b){
+    var on=crossSel.indexOf(b.id)>=0;
+    var el=document.createElement('div');
+    el.className='cross-chip'+(on?' on':'');
+    el.textContent=b.name;
+    el.onclick=function(){toggleCrossChip(b.id);};
+    wrap.appendChild(el);
+  });
+}
+function toggleCrossChip(id){
+  var i=crossSel.indexOf(id);
+  if(i>=0)crossSel.splice(i,1);else crossSel.push(id);
+  renderCrossChips();updateScopeNote();updateRunBtn();
+}
+function getCrossSelection(){return crossSel.filter(function(id){return businesses.some(function(b){return b.id===id;});});}
+function updateScopeNote(){
+  var note=document.getElementById('biz-ctx-note');if(!note)return;
+  if(dirScope==='cross'){
+    var n=getCrossSelection().length;
+    note.innerHTML=(n<2?'SELECT AT LEAST 2 BUSINESSES':'DIRECTIVE WILL SPAN <span id="biz-ctx-name">'+n+' BUSINESSES</span>');
+  }else{
+    var b=getActiveBiz();
+    note.innerHTML='DIRECTIVE WILL BE SCOPED TO <span id="biz-ctx-name">'+((b&&b.name)?escHtml(b.name.toUpperCase()):'—')+'</span>';
+  }
+}
+function setCrossBanner(names){
+  var el=document.getElementById('cross-banner');if(!el)return;
+  if(names&&names.length){el.textContent='◆ CROSS-BUSINESS · '+names.join(' · ').toUpperCase();el.style.display='block';}
+  else{el.style.display='none';el.textContent='';}
+}
+function formatMultiBizContext(list){
+  var L=['╔══ CROSS-BUSINESS PORTFOLIO DIRECTIVE · '+list.length+' BUSINESSES ══╗',
+    'Analyse ACROSS these businesses: synergies to exploit, conflicts and resource contention to resolve, sequencing, and portfolio-level trade-offs. Attribute every point to the specific business(es) it concerns.',''];
+  list.forEach(function(b){L.push(formatBizContext(b));L.push('');});
+  L.push('╚══ END PORTFOLIO ('+list.map(function(b){return b.name;}).join(' · ')+') ══╝');
+  return L.join('\n')+'\n\n';
+}
+function activeCtx(){
+  if(runIsCross&&runScopeIds&&runScopeIds.length){
+    var list=runScopeIds.map(function(id){return businesses.find(function(b){return b.id===id;});}).filter(Boolean);
+    if(list.length)return formatMultiBizContext(list);
+  }
+  var b=getActiveBiz();
+  return b?formatBizContext(b)+'\n\n':'';
+}
 
 /* ── DATE ──────────────────────────────────────── */
 document.getElementById('tb-r').textContent=new Date().toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'}).toUpperCase();
@@ -1464,9 +1586,7 @@ function renderPills(){
 function removeDoc(i){uploadedDocs.splice(i,1);renderPills();}
 
 function buildContent(prompt){
-  var biz=getActiveBiz();
-  var bizCtx=biz?formatBizContext(biz)+'\n\n':'';
-  var fullPrompt=bizCtx+prompt;
+  var fullPrompt=activeCtx()+prompt;
   if(!uploadedDocs.length||!uploadedDocs.every(function(d){return d.ready;}))return fullPrompt;
   var parts=[];
   uploadedDocs.forEach(function(d){d.contentBlocks.forEach(function(b){parts.push(b);});});
@@ -1610,9 +1730,14 @@ function importData(input){
 
 /* Run button shows the active business — scope is in your click path */
 function updateRunBtn(){
-  var b=getActiveBiz();
   var btn=document.getElementById('runbtn');
-  if(btn&&!btn.disabled)btn.textContent='▶ ISSUE — '+((b&&b.name)||'').toUpperCase();
+  if(!btn||btn.disabled)return;
+  if(dirScope==='cross'){
+    btn.textContent='▶ ISSUE — PORTFOLIO ('+getCrossSelection().length+')';
+  }else{
+    var b=getActiveBiz();
+    btn.textContent='▶ ISSUE — '+((b&&b.name)||'').toUpperCase();
+  }
 }
 
 /* ── LIGHTWEIGHT MARKDOWN → HTML (safe) ──────── */
@@ -1755,7 +1880,7 @@ function retryAgent(id){
 function doneState(ok){
   document.getElementById('runbtn').disabled=false;updateRunBtn();
   if(ok){document.getElementById('rstbtn').style.display='inline-block';document.getElementById('pdfbtn').style.display='inline-block';}
-  running=false;
+  running=false;runIsCross=false;runScopeIds=null;
 }
 
 function go(){
@@ -1764,12 +1889,19 @@ function go(){
   if(!cloudOn()&&!getKey()){showErr('No API key set. Either sign in (sidebar → SYNC) to use the server-side key, or open the API panel at the bottom-left, paste your sk-ant-… key, and click SAVE KEY.');document.getElementById('api-panel').classList.add('open');return;}
   if(!uploadedDocs.every(function(d){return d.ready;})){showErr('Files still processing. Please wait.');return;}
 
-  // In manual mode, validate selection
-  var manualSel=selMode==='manual'?getManualSelection():[];
-  if(selMode==='manual'&&manualSel.length===0){showErr('MANUAL MODE: Please check at least one agent in the sidebar before running.');return;}
+  var cross=(dirScope==='cross');
+  if(cross){
+    crossSel=getCrossSelection();
+    if(crossSel.length<2){showErr('CROSS-BUSINESS: select at least 2 businesses in the scope picker above.');return;}
+  }
+  // In manual mode (single scope only), validate selection
+  var manualSel=(!cross&&selMode==='manual')?getManualSelection():[];
+  if(!cross&&selMode==='manual'&&manualSel.length===0){showErr('MANUAL MODE: Please check at least one agent in the sidebar before running.');return;}
 
   running=true;lastTask=task;lastOutputs={};lastBriefs={};lastSynthesis='';lastSummary='';lastAgents=[];currentPlan=null;
+  runIsCross=cross;runScopeIds=cross?crossSel.slice():null;
   runCost=0;currentRunId=null;updateCostMeter();
+  setCrossBanner(cross?crossSel.map(function(id){var b=businesses.find(function(x){return x.id===id;});return b?b.name:id;}):null);
   document.getElementById('followup-sec').style.display='none';
   document.getElementById('runbtn').disabled=true;document.getElementById('runbtn').textContent='RUNNING...';
   document.getElementById('rstbtn').style.display='none';document.getElementById('pdfbtn').style.display='none';
@@ -1787,25 +1919,22 @@ function go(){
 
   var docNote=uploadedDocs.length?' [Documents: '+uploadedDocs.map(function(d){return d.name;}).join(', ')+']':'';
 
-  // In manual mode, bypass Fredrick's selection but still get his summary
-  if(selMode==='manual'){
-    // Build fake plan with manual selection
+  // Manual agent selection (single-business scope only); cross-business always uses Fredrick's portfolio planning
+  if(!cross&&selMode==='manual'){
     var manualBriefs={};
     manualSel.forEach(function(id){manualBriefs[id]='Analyse the task: '+task+(docNote?docNote:'');});
     var fakePlan={task_summary:task.slice(0,80)+(task.length>80?'...':''),agents_selected:manualSel,briefs:manualBriefs};
-    // Still run Fredrick to get a task summary and proper briefs
     callAPI(SP.fredrick,buildContent(task+docNote),1,MODELS.orchestrator,TOKENS.plan).then(function(raw){
       try{
         var fp=extractJSON(raw);
-        // Use Fredrick's summary but override agent selection
         fakePlan.task_summary=fp.task_summary||fakePlan.task_summary;
-        // Use Fredrick's briefs where available, fallback to generic
         manualSel.forEach(function(id){if(fp.briefs&&fp.briefs[id])fakePlan.briefs[id]=fp.briefs[id];});
       }catch(e){}
       runWithPlan(fakePlan,task,docNote);
     }).catch(function(){runWithPlan(fakePlan,task,docNote);});
   } else {
-    callAPI(SP.fredrick,buildContent(task+docNote),1,MODELS.orchestrator,TOKENS.plan).then(function(raw){
+    var planPrompt=cross?SP.fredrickCross:SP.fredrick;
+    callAPI(planPrompt,buildContent(task+docNote),1,MODELS.orchestrator,TOKENS.plan).then(function(raw){
       var plan;
       try{plan=extractJSON(raw);}
       catch(e){setFredrick('error','Could not parse Fredrick: '+e.message,[]);showErr(e.message);doneState(false);return;}
@@ -1844,9 +1973,10 @@ function runWithPlan(plan,task,docNote){
     setPhase('SYNTHESISING','var(--gold)');
     setFredrick('working',lastSummary,lastAgents);
     var si='DIRECTIVE: '+task+'\n\n'+Object.keys(outputs).map(function(id){return'=== '+(AN[id]||id).toUpperCase()+' ===\n'+outputs[id];}).join('\n\n');
-    var biz=getActiveBiz();
-    var synInput=biz?formatBizContext(biz)+'\n\n'+si:si;
-    callAPI(SP.synthesis,synInput,1,MODELS.orchestrator,TOKENS.synthesis).then(function(o){
+    var synInput=activeCtx()+si;
+    var synPrompt=runIsCross?SP.synthesisCross:SP.synthesis;
+    var wasCross=runIsCross,scopeIds=runScopeIds?runScopeIds.slice():null;
+    callAPI(synPrompt,synInput,1,MODELS.orchestrator,TOKENS.synthesis).then(function(o){
       lastSynthesis=o;
       document.getElementById('syn-body').innerHTML=mdToHtml(o);
       document.getElementById('syn-card').style.display='block';
@@ -1854,7 +1984,8 @@ function runWithPlan(plan,task,docNote){
       document.getElementById('syn-card').scrollIntoView({behavior:'smooth',block:'start'});
       setFredrick('done',lastSummary,lastAgents);setSba('fredrick','done');
       setPhase('COMPLETE','var(--cfo)');
-      doneState(true);saveToHistory(task,lastSummary);
+      doneState(true);
+      if(wasCross&&scopeIds)saveCrossToHistory(task,lastSummary,scopeIds);else saveToHistory(task,lastSummary);
     }).catch(function(e){showErr('Synthesis failed: '+e.message);doneState(false);});
   });
 }
@@ -1890,6 +2021,37 @@ function saveToHistory(task,summary){
   }
   loadHistory();
   showFollowUp(findRun(rid));
+}
+
+/* Cross-business run: file one copy under EVERY involved business (tagged to all) */
+function saveCrossToHistory(task,summary,bizIds){
+  var base='xrun_'+Date.now().toString(36);
+  var names=bizIds.map(function(id){var b=businesses.find(function(x){return x.id===id;});return b?b.name:id;});
+  var now=new Date();
+  var time=now.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+  var date=now.toLocaleDateString('en-GB',{day:'2-digit',month:'short'});
+  var all=JSON.parse(localStorage.getItem('kc_history_v3')||'{}');
+  bizIds.forEach(function(bid){
+    var rid=base+'__'+bid;
+    var rec={id:rid,task:task,summary:summary,cross:true,biz_ids:bizIds.slice(),biz_names:names.slice(),
+      agents:lastAgents.slice(),briefs:JSON.parse(JSON.stringify(lastBriefs)),outputs:JSON.parse(JSON.stringify(lastOutputs)),
+      synthesis:lastSynthesis,time:time,date:date};
+    var hist=all[bid]||[];
+    hist.unshift(rec);
+    if(hist.length>8)hist=hist.slice(0,8);
+    all[bid]=hist;
+    cloudPushRun(rid,bid,rec);
+  });
+  for(var tries=0;tries<6;tries++){
+    try{localStorage.setItem('kc_history_v3',JSON.stringify(all));break;}
+    catch(e){var t=false;Object.keys(all).forEach(function(b){if(all[b].length>2){all[b]=all[b].slice(0,all[b].length-1);t=true;}});if(!t){showErr('History storage full — use EXPORT DATA to back up.');break;}}
+  }
+  audit('cross_run.created','run',base,{businesses:bizIds,names:names});
+  // focus results/follow-up on an involved business (switch active if needed so it appears in the sidebar)
+  if(bizIds.indexOf(activeBizId)<0){activeBizId=bizIds[0];saveActiveBiz();renderBizUI();}
+  currentRunId=base+'__'+activeBizId;
+  loadHistory();
+  showFollowUp(findRun(currentRunId));
 }
 
 /* ── FOLLOW-UP THREAD (continue a completed run with only the relevant agents) ── */
@@ -2005,8 +2167,9 @@ function loadHistory(){
   hist.forEach(function(h,idx){
     var d=document.createElement('div');d.className='hist-item';
     var meta=(h.date?h.date+' · ':'')+h.time+' · '+escHtml((h.summary||'').slice(0,40));
+    var crossTag=h.cross?' · <span class="hist-cross">◆ '+((h.biz_ids&&h.biz_ids.length)||2)+' BIZ</span>':'';
     d.innerHTML='<div class="hist-task">'+escHtml(h.task.slice(0,60))+(h.task.length>60?'…':'')+'</div>'
-      +'<div class="hist-meta">'+meta+(h.outputs?' · <span style="color:var(--gold)">OPEN ▸</span>':'')+'</div>';
+      +'<div class="hist-meta">'+meta+crossTag+(h.outputs?' · <span style="color:var(--gold)">OPEN ▸</span>':'')+'</div>';
     d.onclick=function(){
       if(h.outputs){openRun(h);}
       else{document.getElementById('task').value=h.task;document.getElementById('task').focus();}
@@ -2022,6 +2185,7 @@ function openRun(h){
   lastBriefs=h.briefs||{};lastOutputs=h.outputs||{};lastSynthesis=h.synthesis||'';
   currentPlan={briefs:lastBriefs,agents_selected:lastAgents,task_summary:lastSummary};
   setFredrick('done',h.summary,lastAgents);
+  setCrossBanner(h.cross?(h.biz_names||[]):null);
   document.getElementById('agents-lbl').style.display='block';
   lastAgents.forEach(function(id){
     if(lastOutputs[id])showAgentCard(id,'done',lastBriefs[id]||'',lastOutputs[id]);
@@ -2162,6 +2326,7 @@ function resetAll(){
   setPhase('AWAITING ORDERS','');
   uploadedDocs=[];renderPills();
   var fsec=document.getElementById('followup-sec');if(fsec)fsec.style.display='none';
+  setCrossBanner(null);
   currentRunId=null;
   lastOutputs={};lastBriefs={};lastSynthesis='';lastSummary='';lastAgents=[];currentPlan=null;running=false;
 }
