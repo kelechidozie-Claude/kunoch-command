@@ -1061,7 +1061,9 @@ function sendMagicLink(){
   var email=(document.getElementById('auth-email')||{}).value;
   email=(email||'').trim();
   if(!email){showErr('Enter your email to receive a magic link.');return;}
-  SB.auth.signInWithOtp({email:email,options:{emailRedirectTo:location.href.split('#')[0]}}).then(function(r){
+  // Always send the magic link back to the canonical live app, never to a local/preview page
+  var redirectTo=/github\.io$/.test(location.hostname)?location.href.split('#')[0].split('?')[0]:'https://kelechidozie-claude.github.io/kunoch-command/';
+  SB.auth.signInWithOtp({email:email,options:{emailRedirectTo:redirectTo}}).then(function(r){
     var m=document.getElementById('auth-msg');
     if(r.error){if(m)m.textContent='';showErr('Sign-in: '+r.error.message);}
     else if(m)m.textContent='Magic link sent to '+email+'. Open it on this device to sign in.';
