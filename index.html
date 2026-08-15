@@ -48,6 +48,37 @@ document.getElementById('modal-backdrop').addEventListener('keydown',function(e)
     to=setTimeout(function(){localStorage.setItem('kc_draft',t.value);},300);
   });
 })();
+
+function toggleStar(id){
+  var btn=document.getElementById('star-'+id);if(!btn)return;
+  btn.classList.toggle('on');
+  // Persist in the current run's history entry if it exists
+  var h=JSON.parse(localStorage.getItem('kc_history_v3')||'{}');
+  var biz=h[activeBizId]||[];
+  if(biz.length&&biz[0].id===lastRunId){
+    if(!biz[0].stars)biz[0].stars=[];
+    var idx=biz[0].stars.indexOf(id);
+    if(idx>-1)biz[0].stars.splice(idx,1);else biz[0].stars.push(id);
+    localStorage.setItem('kc_history_v3',JSON.stringify(h));
+  }
+}
+
+function countWords(s){return(s||'').trim().split(/\s+/).filter(function(w){return w.length>0;}).length;}
+function countTokens(s){return Math.round(countWords(s)*1.3);}
+function fmtCount(s){var w=countWords(s);var t=countTokens(s);return w+' words · ~'+t+' tokens';}
+
+function toggleTaskFullscreen(){
+  var fs=document.getElementById('task-fs');var ta=document.getElementById('task');var fsta=document.getElementById('task-fs-ta');
+  if(fs.classList.contains('open')){ta.value=fsta.value;fs.classList.remove('open');ta.focus();}
+  else{fsta.value=ta.value;fs.classList.add('open');fsta.focus();}
+}
+
+/* ── OFFLINE INDICATOR ───────────────────────── */
+(function(){
+  var dot=document.getElementById('conn-status');if(!dot)return;
+  function set(){dot.classList.toggle('offline',!navigator.onLine);dot.title=navigator.onLine?'Online':'Offline';}
+  set();window.addEventListener('online',set);window.addEventListener('offline',set);
+})();
 </script>
 <style>
 :root{
@@ -102,7 +133,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 /* HISTORY */
 #sb-hist-lbl{font-family:'DM Mono',monospace;font-size:9px;color:var(--text-muted);letter-spacing:2px;padding:0 22px;margin-bottom:6px;margin-top:4px}
 #sb-history{padding:0 14px}
-.hist-item{padding:7px 10px;border-radius:var(--r);background:var(--surface2);border:1px solid var(--border);margin-bottom:5px;cursor:pointer;transition:all .2s}
+.hist-item{padding:7px 10px;border-radius:var(--r);background:var(--surface2);border:1px solid var(--border);margin-bottom:5px;cursor:pointer;transition:all .2s;position:relative}.hist-compare{position:absolute;right:8px;top:50%;transform:translateY(-50%);width:14px;height:14px;border-radius:2px;border:1px solid var(--border);background:var(--bg);appearance:none;-webkit-appearance:none;cursor:pointer}.hist-compare:checked{background:var(--gold);border-color:var(--gold)}
 .hist-item:hover{border-color:var(--gold-dim)}
 .hist-task{font-size:10px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .hist-meta{font-family:'DM Mono',monospace;font-size:9px;color:var(--text-muted);margin-top:2px;letter-spacing:1px}
@@ -367,7 +398,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 
   <div id="sb-footer">
     <div id="api-row" onclick="toggleApi()">
-      <div id="api-dot"></div>
+      <div id="api-dot"></div><div id="conn-status" style="width:6px;height:6px;border-radius:50%;background:var(--cfo);flex-shrink:0;margin-left:auto" title="Online"></div>
       <div id="api-lbl">API KEY NOT SET</div>
       <span style="font-size:10px;color:var(--text-muted)">▾</span>
     </div>
@@ -417,7 +448,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
     </div>
 
     <!-- DIRECTIVE -->
-    <div id="dir-sec">
+    <div id="dir-sec" style="position:relative"><button id="task-expand" onclick="toggleTaskFullscreen()" style="position:absolute;right:12px;top:12px;background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:14px;z-index:2" title="Fullscreen">⛶</button>
       <div class="sec-lbl">DIRECTIVE TO FREDRICK</div>
       <textarea id="task" placeholder="Issue your directive. In AUTO mode, Fredrick selects the right agents. In MANUAL mode, you choose which agents run.&#10;&#10;Examples:&#10;• Model the 3-year IRR for the Cirquu equity stake at 3 exit scenarios&#10;• Review this MOU and flag the legal exposure before I sign&#10;• Structure the Vertex PPP framework for Liberia passport contract renewal&#10;• Assess whether to acquire or partner with this logistics company"></textarea>
       <div id="task-hint"><span id="run-hint-key">⌘</span> + ENTER TO RUN</div>
@@ -481,7 +512,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
             <div class="acard-top"><div><div class="acard-name" style="color:var(--cfo)">CFO — FINANCIAL MODELLING</div><div class="acard-role">Revenue Models · IRR · NPV · P&amp;L</div></div><div class="acard-badge" id="ab-cfo" style="color:var(--cfo);background:var(--cfo)18;border:1px solid var(--cfo)33">—</div></div>
             <div class="acard-brief" id="abr-cfo" onclick="toggleBrief('cfo')"><div class="acard-brief-lbl" style="color:var(--cfo)">FREDRICK'S BRIEF ▾</div><div class="acard-brief-text" id="abt-cfo"></div></div>
             <div class="acard-body" id="ao-cfo"></div>
-            <div class="acard-footer"><button class="retry-btn" id="ar-cfo" onclick="retryAgent('cfo')">↺ RETRY</button><button class="copy-btn" onclick="copyOutput('cfo')">COPY</button></div>
+            <div class="acard-footer"><button class="acard-star" id="star-cfo" onclick="toggleStar('cfo')">★</button><button class="retry-btn" id="ar-cfo" onclick="retryAgent('cfo')">↺ RETRY</button><button class="copy-btn" onclick="copyOutput('cfo')">COPY</button></div>
           </div>
         </div>
 
@@ -491,7 +522,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
             <div class="acard-top"><div><div class="acard-name" style="color:var(--legal)">LEGAL ADVISOR</div><div class="acard-role">Contracts · IP · Multi-jurisdiction</div></div><div class="acard-badge" id="ab-legal" style="color:var(--legal);background:var(--legal)18;border:1px solid var(--legal)33">—</div></div>
             <div class="acard-brief" id="abr-legal" onclick="toggleBrief('legal')"><div class="acard-brief-lbl" style="color:var(--legal)">FREDRICK'S BRIEF ▾</div><div class="acard-brief-text" id="abt-legal"></div></div>
             <div class="acard-body" id="ao-legal"></div>
-            <div class="acard-footer"><button class="retry-btn" id="ar-legal" onclick="retryAgent('legal')">↺ RETRY</button><button class="copy-btn" onclick="copyOutput('legal')">COPY</button></div>
+            <div class="acard-footer"><button class="acard-star" id="star-legal" onclick="toggleStar('legal')">★</button><button class="retry-btn" id="ar-legal" onclick="retryAgent('legal')">↺ RETRY</button><button class="copy-btn" onclick="copyOutput('legal')">COPY</button></div>
           </div>
         </div>
 
@@ -501,7 +532,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
             <div class="acard-top"><div><div class="acard-name" style="color:var(--ma)">M&amp;A STRATEGIST</div><div class="acard-role">Deals · Valuation · Due Diligence</div></div><div class="acard-badge" id="ab-ma" style="color:var(--ma);background:var(--ma)18;border:1px solid var(--ma)33">—</div></div>
             <div class="acard-brief" id="abr-ma" onclick="toggleBrief('ma')"><div class="acard-brief-lbl" style="color:var(--ma)">FREDRICK'S BRIEF ▾</div><div class="acard-brief-text" id="abt-ma"></div></div>
             <div class="acard-body" id="ao-ma"></div>
-            <div class="acard-footer"><button class="retry-btn" id="ar-ma" onclick="retryAgent('ma')">↺ RETRY</button><button class="copy-btn" onclick="copyOutput('ma')">COPY</button></div>
+            <div class="acard-footer"><button class="acard-star" id="star-ma" onclick="toggleStar('ma')">★</button><button class="retry-btn" id="ar-ma" onclick="retryAgent('ma')">↺ RETRY</button><button class="copy-btn" onclick="copyOutput('ma')">COPY</button></div>
           </div>
         </div>
 
@@ -511,7 +542,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
             <div class="acard-top"><div><div class="acard-name" style="color:var(--ppp)">PPP CONSULTANT</div><div class="acard-role">Gov't Contracts · Liberia · Nigeria</div></div><div class="acard-badge" id="ab-ppp" style="color:var(--ppp);background:var(--ppp)18;border:1px solid var(--ppp)33">—</div></div>
             <div class="acard-brief" id="abr-ppp" onclick="toggleBrief('ppp')"><div class="acard-brief-lbl" style="color:var(--ppp)">FREDRICK'S BRIEF ▾</div><div class="acard-brief-text" id="abt-ppp"></div></div>
             <div class="acard-body" id="ao-ppp"></div>
-            <div class="acard-footer"><button class="retry-btn" id="ar-ppp" onclick="retryAgent('ppp')">↺ RETRY</button><button class="copy-btn" onclick="copyOutput('ppp')">COPY</button></div>
+            <div class="acard-footer"><button class="acard-star" id="star-ppp" onclick="toggleStar('ppp')">★</button><button class="retry-btn" id="ar-ppp" onclick="retryAgent('ppp')">↺ RETRY</button><button class="copy-btn" onclick="copyOutput('ppp')">COPY</button></div>
           </div>
         </div>
 
@@ -521,7 +552,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
             <div class="acard-top"><div><div class="acard-name" style="color:var(--board)">BOARD ADVISOR</div><div class="acard-role">Governance · Family Office · Exit</div></div><div class="acard-badge" id="ab-board" style="color:var(--board);background:var(--board)18;border:1px solid var(--board)33">—</div></div>
             <div class="acard-brief" id="abr-board" onclick="toggleBrief('board')"><div class="acard-brief-lbl" style="color:var(--board)">FREDRICK'S BRIEF ▾</div><div class="acard-brief-text" id="abt-board"></div></div>
             <div class="acard-body" id="ao-board"></div>
-            <div class="acard-footer"><button class="retry-btn" id="ar-board" onclick="retryAgent('board')">↺ RETRY</button><button class="copy-btn" onclick="copyOutput('board')">COPY</button></div>
+            <div class="acard-footer"><button class="acard-star" id="star-board" onclick="toggleStar('board')">★</button><button class="retry-btn" id="ar-board" onclick="retryAgent('board')">↺ RETRY</button><button class="copy-btn" onclick="copyOutput('board')">COPY</button></div>
           </div>
         </div>
 
@@ -531,7 +562,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
             <div class="acard-top"><div><div class="acard-name" style="color:var(--tech)">TECH ARCHITECT</div><div class="acard-role">AI · SaaS · Digital Infrastructure</div></div><div class="acard-badge" id="ab-tech" style="color:var(--tech);background:var(--tech)18;border:1px solid var(--tech)33">—</div></div>
             <div class="acard-brief" id="abr-tech" onclick="toggleBrief('tech')"><div class="acard-brief-lbl" style="color:var(--tech)">FREDRICK'S BRIEF ▾</div><div class="acard-brief-text" id="abt-tech"></div></div>
             <div class="acard-body" id="ao-tech"></div>
-            <div class="acard-footer"><button class="retry-btn" id="ar-tech" onclick="retryAgent('tech')">↺ RETRY</button><button class="copy-btn" onclick="copyOutput('tech')">COPY</button></div>
+            <div class="acard-footer"><button class="acard-star" id="star-tech" onclick="toggleStar('tech')">★</button><button class="retry-btn" id="ar-tech" onclick="retryAgent('tech')">↺ RETRY</button><button class="copy-btn" onclick="copyOutput('tech')">COPY</button></div>
           </div>
         </div>
 
@@ -541,14 +572,14 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
             <div class="acard-top"><div><div class="acard-name" style="color:var(--research)">RESEARCH INTEL</div><div class="acard-role">Market Data · Competitors · Trends</div></div><div class="acard-badge" id="ab-research" style="color:var(--research);background:var(--research)18;border:1px solid var(--research)33">—</div></div>
             <div class="acard-brief" id="abr-research" onclick="toggleBrief('research')"><div class="acard-brief-lbl" style="color:var(--research)">FREDRICK'S BRIEF ▾</div><div class="acard-brief-text" id="abt-research"></div></div>
             <div class="acard-body" id="ao-research"></div>
-            <div class="acard-footer"><button class="retry-btn" id="ar-research" onclick="retryAgent('research')">↺ RETRY</button><button class="copy-btn" onclick="copyOutput('research')">COPY</button></div>
+            <div class="acard-footer"><button class="acard-star" id="star-research" onclick="toggleStar('research')">★</button><button class="retry-btn" id="ar-research" onclick="retryAgent('research')">↺ RETRY</button><button class="copy-btn" onclick="copyOutput('research')">COPY</button></div>
           </div>
         </div>
 
       </div>
 
       <div id="syn-card">
-        <div id="syn-hdr"><div id="syn-title">Executive Briefing</div><div id="syn-lbl">FREDRICK'S SYNTHESIS</div></div>
+        <div id="syn-hdr"><div id="syn-title">Executive Briefing</div><div id="syn-wc" style="font-family:DM Mono,monospace;font-size:8px;color:var(--text-muted);letter-spacing:1px;margin-top:4px"></div><div id="syn-lbl">FREDRICK'S SYNTHESIS</div></div>
         <div id="syn-body"></div>
         <div id="syn-footer"><button class="copy-btn" onclick="copySyn()">COPY BRIEFING</button></div>
       </div>
@@ -1595,7 +1626,7 @@ function runWithPlan(plan,task,docNote){
     function renderSynthesis(s){var c='';if(lastAgents&&lastAgents.length){c='<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--text-muted);letter-spacing:1px;margin-bottom:14px">Contributing agents: '+lastAgents.map(function(a){return(AN[a]||a).toUpperCase();}).join(' · ')+'</div>';}return c+mdToHtml(s);}
 callAPI(SP.synthesis,synInput,1,MODELS.orchestrator,TOKENS.synthesis).then(function(o){
       lastSynthesis=o;
-      document.getElementById('syn-body').innerHTML=renderSynthesis(o);
+      document.getElementById('syn-body').innerHTML=renderSynthesis(o);var swc=document.getElementById('syn-wc');if(swc)swc.textContent=fmtCount(o);
       document.getElementById('syn-card').style.display='block';
       document.getElementById('syn-card').classList.add('fade-in');
       document.getElementById('syn-card').scrollIntoView({behavior:'smooth',block:'start'});
@@ -1717,7 +1748,8 @@ function downloadPDF(){
     +'.tag{font-family:"DM Mono",monospace;font-size:6.5pt;letter-spacing:1.5px;padding:3px 11px;border:1px solid #D8C9A0;color:#9A7830;border-radius:20px;margin-right:6px;display:inline-block}'
     /* agent sections */
     +'.agent{margin-bottom:22px;page-break-inside:avoid;border:1px solid #EDEFF2;border-radius:4px;overflow:hidden}'
-    +'.agent-hd{font-family:"DM Mono",monospace;font-size:9pt;font-weight:500;letter-spacing:2.5px;color:#1A1D24;padding:11px 18px;background:#FAFBFC;border-left:4px solid #9A7830;display:flex;align-items:center;gap:9px}'
+    +'.agent-hd{font-family:"DM Mono",monospace;font-size:9pt;font-weight:500;letter-spacing:2.5px;color:#1A1D24;padding:11px 18px;background:#FAFBFC;border-le.acard-star{background:none;border:none;color:var(--border2);cursor:pointer;font-size:12px;padding:0;margin-right:6px;transition:color .2s}.acard-star:hover{color:var(--gold)}.acard-star.on{color:var(--gold)}
+ft:4px solid #9A7830;display:flex;align-items:center;gap:9px}'
     +'.agent-dot{width:7px;height:7px;border-radius:50%;display:inline-block}'
     +'.agent-body{padding:16px 20px 18px}'
     /* rendered markdown */
@@ -1728,7 +1760,8 @@ function downloadPDF(){
     +'.agent-body ul,.synbox ul{margin:7px 0 9px 2px;list-style:none}'
     +'.agent-body ol,.synbox ol{margin:7px 0 9px 20px}'
     +'.agent-body li,.synbox li{margin-bottom:5px;color:#2A2E36}'
-    +'.agent-body ul li{position:relative;padding-left:15px}'
+    +'.agent-body ul#task-fs{position:fixed;inset:0;background:var(--bg);z-index:300;display:none;padding:40px}#task-fs.open{display:block}#task-fs textarea{width:100%;height:calc(100% - 60px);background:var(--surface);border:1px solid var(--border);border-left:2px solid var(--gold);border-radius:var(--r);color:var(--text);padding:20px;font-size:14px;font-family:'DM Sans',sans-serif;resize:none;outline:none;line-height:1.8}#task-fs-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}#task-fs-hdr span{font-family:'Playfair Display',serif;font-size:16px;color:var(--gold)}
+ li{position:relative;padding-left:15px}'
     +'.agent-body ul li::before,.synbox ul li::before{content:"›";position:absolute;left:2px;color:#9A7830;font-weight:600}'
     +'.synbox ul li{position:relative;padding-left:15px}'
     /* executive briefing */
@@ -1739,7 +1772,8 @@ function downloadPDF(){
     +'.footer{margin-top:30px;border-top:1px solid #EAEAEA;padding-top:10px;font-family:"DM Mono",monospace;font-size:6.5pt;color:#BFC4CC;letter-spacing:1.5px;display:flex;justify-content:space-between}'
     +'@page{margin:18mm 16mm}'
     +'@media print{body{padding:0}.agent,.synwrap{page-break-inside:avoid}}'
-    +'</style></head><body><div class="page">';
+    +'#conn-status{transition:background .3s}#conn-status.offline{background:var(--legal)}
+</style></head><body><div class="page">';
   // letterhead
   h+='<div class="lh"><div class="lh-l"><div class="logo">Kunoch Command</div>'
     +'<div class="sub">FAMILY OFFICE · EXECUTIVE INTELLIGENCE · CONFIDENTIAL</div></div>'
@@ -1753,12 +1787,23 @@ function downloadPDF(){
     +'<div class="tags">'+tags+'</div>';
   // specialist outputs
   h+='<div class="sec">SPECIALIST OUTPUTS</div>'+agSec;
+  // context appendix
+  if(biz){
+    h+='<div class=\'sec\'>BUSINESS CONTEXT</div>';
+    h+='<div style=\'background:#F7F8FA;border:1px solid #EDEFF2;padding:14px 18px;border-radius:3px;margin-bottom:16px\'>';
+    h+='<div style=\'font-family:DM Mono,monospace;font-size:8pt;color:#9A7830;letter-spacing:2px;margin-bottom:6px\'>'+(biz.name||'').toUpperCase()+'</div>';
+    h+='<div style=\'font-size:10pt;color:#3A3F48;line-height:1.6\'>';
+    if(biz.positioning)h+='<p><strong>Positioning:</strong> '+escHtml(biz.positioning)+'</p>';
+    if(biz.stage)h+='<p><strong>Stage:</strong> '+escHtml(biz.stage)+'</p>';
+    if(biz.jurisdictions)h+='<p><strong>Jurisdictions:</strong> '+escHtml(biz.jurisdictions)+'</p>';
+    h+='</div></div>';
+  }
   // executive briefing
   h+='<div class="synwrap"><div class="sec">EXECUTIVE BRIEFING</div>'
     +'<div class="synbox"><div class="syn-ttl">Fredrick\u2019s Executive Briefing</div>'
     +mdToHtml(lastSynthesis)+'</div></div>';
   h+='<div class="footer"><span>KUNOCH COMMAND · CONFIDENTIAL</span><span>'+escHtml(bizName.toUpperCase())+'</span></div>';
-  h+='</div></body></html>';
+  h+='</div><div id="task-fs"><div id="task-fs-hdr"><span>Directive Editor</span><button onclick="toggleTaskFullscreen()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:18px">×</button></div><textarea id="task-fs-ta"></textarea></div></body></html>';
 
   var w=window.open('','_blank','width=900,height=700');
   if(w&&w.document){
@@ -1810,5 +1855,5 @@ function resetAll(){
     </div>
   </div>
 </div>
-</body>
+<div id="task-fs"><div id="task-fs-hdr"><span>Directive Editor</span><button onclick="toggleTaskFullscreen()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:18px">×</button></div><textarea id="task-fs-ta"></textarea></div></body>
 </html>
