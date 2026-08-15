@@ -12,10 +12,12 @@
 <link rel="apple-touch-icon" href="./icon-192.png">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js">
+document.addEventListener('keydown',function(e){if(e.key!=='Escape')return;if(document.getElementById('modal-backdrop').classList.contains('open')){closeBizModal();return;}if(document.getElementById('api-panel').classList.contains('open')){toggleApi();return;}if(document.getElementById('biz-menu').classList.contains('open')){closeBizMenu();return;}});
+</script>
 <style>
 :root{
-  --gold:#C9A84C;--gold-dim:#C9A84C44;--gold-glow:#C9A84C14;
+  --gold:#C9A84C;--gold-dim:#C9A84C44;--gold-glow:#C9A84C33;
   --bg:#08090D;--surface:#0E1018;--surface2:#141620;--surface3:#1A1D2B;
   --border:#1E2235;--border2:#252840;
   --text:#EDF0F7;--text-dim:#B4BCCB;--text-muted:#8A94A6;
@@ -50,7 +52,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 
 .sba{display:flex;align-items:center;gap:9px;padding:8px 8px;border-radius:var(--r);margin-bottom:1px;transition:background .2s}
 .sba:hover{background:var(--surface2)}
-.sba-dot{width:7px;height:7px;border-radius:50%;background:var(--border2);transition:all .4s;flex-shrink:0}
+.sba-dot{width:9px;height:9px;border-radius:50%;background:var(--border2);transition:all .4s;flex-shrink:0}
 .sba-info{flex:1;min-width:0}
 .sba-name{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:1px;color:var(--text-muted);transition:color .4s}
 .sba-role{font-size:11px;color:var(--text-dim);opacity:.6;margin-top:1px}
@@ -110,7 +112,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 .fpill-name{color:var(--text-dim);max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .fpill-rm{background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:12px;line-height:1;margin-left:2px}
 .fpill-rm:hover{color:var(--legal)}
-#proc-note{font-family:'DM Mono',monospace;font-size:10px;color:#D9BC6B;letter-spacing:2px;margin-top:8px;display:none}
+#proc-note{font-family:'DM Mono',monospace;font-size:10px;color:#D9BC6B;letter-spacing:2px;margin-top:8px;display:none}#proc-note .spin{display:inline-block;width:10px;height:10px;border:2px solid var(--gold-dim);border-top-color:var(--gold);border-radius:50%;animation:spin 1s linear infinite}
 
 /* DIRECTIVE */
 #dir-sec{margin-bottom:20px}
@@ -204,7 +206,17 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 .pulse{animation:pulse 1.2s ease-in-out infinite}
 .fade-in{animation:fadeIn .35s ease forwards}
 .spin{display:inline-block;animation:spin 1s linear infinite}
-::-webkit-scrollbar{width:3px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+.proc-ring{display:inline-block;width:11px;height:11px;border:2px solid var(--gold-dim);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite;margin-right:8px;vertical-align:middle}
+
+/* Confirmation sheet */
+#cfm-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:300;display:none;align-items:center;justify-content:center;padding:20px}
+#cfm-backdrop.open{display:flex}
+#cfm-box{background:var(--surface);border:1px solid var(--border2);border-radius:var(--r);width:100%;max-width:420px;padding:24px 28px;box-shadow:0 8px 40px rgba(0,0,0,0.6)}
+#cfm-title{font-family:'Playfair Display',serif;font-size:16px;color:var(--gold);margin-bottom:6px}
+#cfm-msg{font-size:12px;color:var(--text-dim);line-height:1.6;margin-bottom:20px}
+#cfm-row{display:flex;gap:10px;justify-content:flex-end}
+#cfm-row .mbtn{padding:8px 18px}
+::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--gold-dim);border-radius:2px}
 
 /* ── BUSINESS SWITCHER (topbar) ───────────────── */
 #biz-switcher{position:relative;display:flex;align-items:center;gap:12px}
@@ -366,7 +378,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
         <div id="dz-title">DROP FILES OR CLICK TO BROWSE</div>
         <div id="dz-sub">PDF · Word · Excel · PowerPoint · CSV · TXT · Images · Markdown</div>
       </div>
-      <div id="proc-note"><span class="spin">◌</span>&nbsp; PROCESSING...</div>
+      <div id="proc-note"><span class="proc-ring"></span> PROCESSING...</div>
       <div id="file-pills"></div>
     </div>
 
@@ -374,7 +386,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
     <div id="dir-sec">
       <div class="sec-lbl">DIRECTIVE TO FREDRICK</div>
       <textarea id="task" placeholder="Issue your directive. In AUTO mode, Fredrick selects the right agents. In MANUAL mode, you choose which agents run.&#10;&#10;Examples:&#10;• Model the 3-year IRR for the Cirquu equity stake at 3 exit scenarios&#10;• Review this MOU and flag the legal exposure before I sign&#10;• Structure the Vertex PPP framework for Liberia passport contract renewal&#10;• Assess whether to acquire or partner with this logistics company"></textarea>
-      <div id="task-hint">⌘ + ENTER TO RUN</div>
+      <div id="task-hint"><span id="run-hint-key">⌘</span> + ENTER TO RUN</div>
       <div id="biz-ctx-note">DIRECTIVE WILL BE SCOPED TO <span id="biz-ctx-name">—</span></div>
     </div>
 
@@ -916,7 +928,7 @@ function openBizModal(target){
   document.getElementById('modal-backdrop').classList.add('open');
 }
 
-function closeBizModal(){document.getElementById('modal-backdrop').classList.remove('open');editingBizId=null;}
+function closeBizModal(){document.getElementById('modal-backdrop').classList.remove('open');editingBizId=null;window._importData=null;var tabs=document.getElementById('modal-tabs');if(tabs)tabs.style.display='flex';}
 
 function switchTab(tab){
   document.querySelectorAll('.mtab').forEach(function(t){t.classList.toggle('active',t.dataset.tab===tab);});
@@ -1268,14 +1280,14 @@ function exportData(){
   document.body.appendChild(a);a.click();document.body.removeChild(a);
   setTimeout(function(){URL.revokeObjectURL(a.href);},5000);
 }
-function importData(input){
+async function importData(input){
   var f=input.files&&input.files[0];if(!f)return;
   var reader=new FileReader();
   reader.onload=function(){
     try{
       var data=JSON.parse(reader.result);
       if(!data.businesses||!Array.isArray(data.businesses))throw new Error('Not a Kunoch backup file');
-      if(!confirm('Import backup from '+(data.exported||'unknown date')+'? This REPLACES current businesses and history on this device.'))return;
+      var ok=await confirmSheet('Import backup from '+(data.exported||'unknown date')+'? This REPLACES current businesses and history on this device.','Import Backup');if(!ok)return;
       localStorage.setItem('kc_businesses',JSON.stringify(data.businesses));
       if(data.active)localStorage.setItem('kc_active_biz',data.active);
       localStorage.setItem('kc_history_v3',JSON.stringify(data.history||{}));
@@ -1286,6 +1298,34 @@ function importData(input){
   };
   reader.readAsText(f);
 }
+
+/* ── PLATFORM HINT ─────────────────────────────── */
+(function(){
+  var isMac=navigator.platform.toUpperCase().indexOf('MAC')>=0;
+  var k=document.getElementById('run-hint-key');if(k)k.textContent=isMac?'⌘':'Ctrl';
+})();
+
+/* ── ESCAPE TO CLOSE ───────────────────────────── */
+document.addEventListener('keydown',function(e){
+  if(e.key==='Escape'){
+    document.getElementById('api-panel').classList.remove('open');
+    closeBizMenu();
+    closeConfirm();
+  }
+});
+
+/* ── CONFIRMATION SHEET ────────────────────────── */
+var confirmResolve=null;
+function confirmSheet(msg,title){
+  return new Promise(function(res){
+    confirmResolve=res;
+    document.getElementById('cfm-title').textContent=title||'Confirm';
+    document.getElementById('cfm-msg').textContent=msg||'Are you sure?';
+    document.getElementById('cfm-backdrop').classList.add('open');
+  });
+}
+function closeConfirm(){document.getElementById('cfm-backdrop').classList.remove('open');if(confirmResolve){confirmResolve(false);confirmResolve=null;}}
+function doConfirm(){document.getElementById('cfm-backdrop').classList.remove('open');if(confirmResolve){confirmResolve(true);confirmResolve=null;}}
 
 /* Run button shows the active business — scope is in your click path */
 function updateRunBtn(){
@@ -1691,5 +1731,16 @@ function resetAll(){
   lastOutputs={};lastBriefs={};lastSynthesis='';lastSummary='';lastAgents=[];currentPlan=null;running=false;
 }
 </script>
+<!-- Confirmation sheet -->
+<div id="cfm-backdrop">
+  <div id="cfm-box">
+    <div id="cfm-title">Confirm Import</div>
+    <div id="cfm-msg">Replace current businesses and history?</div>
+    <div id="cfm-row">
+      <button class="mbtn mbtn-cancel" onclick="closeConfirm()">CANCEL</button>
+      <button class="mbtn mbtn-save" onclick="doConfirm()">CONFIRM IMPORT</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
