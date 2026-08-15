@@ -79,6 +79,53 @@ function toggleTaskFullscreen(){
   function set(){dot.classList.toggle('offline',!navigator.onLine);dot.title=navigator.onLine?'Online':'Offline';}
   set();window.addEventListener('online',set);window.addEventListener('offline',set);
 })();
+
+function runFollowUp(){
+  var task=document.getElementById('followup-task').value.trim();
+  if(!task)return;
+  var selected=[];
+  document.querySelectorAll('.fu-chk:checked').forEach(function(c){selected.push(c.dataset.agent);});
+  if(!selected.length){showErr('Select at least one agent for follow-up');return;}
+  document.getElementById('followup-btn').disabled=true;
+  setPhase('FOLLOW-UP · '+selected.length+' agents','var(--gold)');
+  selected.forEach(function(id,i){
+    setTimeout(function(){
+      setSba(id,'working');
+      var brief='Follow-up to previous directive. Original: '+lastTask+'\n\nFollow-up question: '+task;
+      callAPI(SP[id],buildContent(brief)).then(function(o){
+        var outText=typeof o==='object'?o.text:o;
+        lastOutputs[id]=outText;
+        showAgentCard(id,'done',null,o);
+        setSba(id,'done');
+        // Append to current history
+        var h=JSON.parse(localStorage.getItem('kc_history_v3')||'{}');
+        var biz=h[activeBizId]||[];
+        if(biz.length&&biz[0].id===lastRunId){
+          if(!biz[0].followUps)biz[0].followUps=[];
+          biz[0].followUps.push({agent:id,task:task,output:outText,time:new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})});
+          localStorage.setItem('kc_history_v3',JSON.stringify(h));
+        }
+      }).catch(function(e){showAgentCard(id,'error',null,e.message);setSba(id,'error');});
+    },i*600);
+  });
+  document.getElementById('followup-btn').disabled=false;
+}
+
+function updateCostDisplay(){
+  var el=document.getElementById('cost-display');
+  if(!el)return;
+  var cost=getMonthlyCost();
+  if(cost>0){el.textContent='This month: '+fmtCost(cost);el.style.display='block';}
+  else{el.style.display='none';}
+}
+
+/* ── COST TRACKING ───────────────────────────── */
+var PRICING={'claude-sonnet-4-6':{input:3,output:15},'claude-fable-5':{input:5,output:25}};
+function getModelPrice(model){var p=PRICING[model];return p||{input:3,output:15};}
+function calcCost(usage,model){var p=getModelPrice(model);return((usage.input_tokens||0)*p.input+(usage.output_tokens||0)*p.output)/1000000;}
+function saveCost(amount){var now=new Date();var key='kc_costs_'+now.getFullYear()+'_'+(now.getMonth()+1);var costs=JSON.parse(localStorage.getItem('kc_costs')||'{}');if(!costs[key])costs[key]=0;costs[key]+=amount;localStorage.setItem('kc_costs',JSON.stringify(costs));}
+function getMonthlyCost(){var now=new Date();var key='kc_costs_'+now.getFullYear()+'_'+(now.getMonth()+1);var costs=JSON.parse(localStorage.getItem('kc_costs')||'{}');return costs[key]||0;}
+function fmtCost(n){return'$'+n.toFixed(4);}
 </script>
 <style>
 :root{
@@ -397,7 +444,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
   </div>
 
   <div id="sb-footer">
-    <div id="api-row" onclick="toggleApi()">
+    <div id="cost-display" style="font-family:DM Mono,monospace;font-size:8px;color:var(--text-muted);letter-spacing:1px;padding:4px 8px;text-align:center;border-bottom:1px solid var(--border);display:none"></div><div id="api-row" onclick="toggleApi()">
       <div id="api-dot"></div><div id="conn-status" style="width:6px;height:6px;border-radius:50%;background:var(--cfo);flex-shrink:0;margin-left:auto" title="Online"></div>
       <div id="api-lbl">API KEY NOT SET</div>
       <span style="font-size:10px;color:var(--text-muted)">▾</span>
@@ -583,7 +630,13 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
         <div id="syn-body"></div>
         <div id="syn-footer"><button class="copy-btn" onclick="copySyn()">COPY BRIEFING</button></div>
       </div>
-    </div>
+    <div id="followup-sec" style="display:none;margin-top:20px;padding:20px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r)">
+  <div style="font-family:DM Mono,monospace;font-size:9px;color:var(--text-muted);letter-spacing:2px;margin-bottom:10px">FOLLOW-UP</div>
+  <textarea id="followup-task" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-left:2px solid var(--gold);border-radius:var(--r);color:var(--text);padding:12px 14px;font-size:12px;font-family:DM Sans,sans-serif;resize:vertical;outline:none;line-height:1.6;min-height:80px;display:block;margin-bottom:10px" placeholder="Ask a follow-up question to specific agents..."></textarea>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px" id="followup-agents"></div>
+  <button id="followup-btn" onclick="runFollowUp()" style="background:var(--gold);color:#000;border:none;border-radius:var(--r);padding:10px 24px;font-size:10px;letter-spacing:2px;font-family:DM Mono,monospace;font-weight:500;cursor:pointer">▶ RUN FOLLOW-UP</button>
+</div>
+</div>
   </div>
 </div>
 </div>
@@ -1106,7 +1159,7 @@ document.addEventListener('input',function(e){
 });
 
 /* ── BUSINESS CONTEXT INJECTION ───────────────── */
-function formatBizContext(biz){
+function formatBizContext(biz){var ctx='';var hist=JSON.parse(localStorage.getItem('kc_history_v3')||'{}');var bizHist=hist[biz.id]||[];if(bizHist.length>0){var recent=bizHist.slice(0,3);ctx='\n\nRECENT DIRECTIVES FOR THIS BUSINESS (memory):\n'+recent.map(function(h,i){return(i+1)+'. '+h.date+' '+h.time+': '+h.task+'\nSummary: '+(h.summary||'N/A');}).join('\n');}
   if(!biz)return '';
   var L=[];
   L.push('═══════════════════════════════════════');
@@ -1283,7 +1336,7 @@ window.onload=function(){
   updateRunBtn();
   if('serviceWorker' in navigator){try{navigator.serviceWorker.register('./sw.js');}catch(e){}}
 };
-function toggleApi(){document.getElementById('api-panel').classList.toggle('open');}
+function toggleApi(){document.getElementById('api-panel').classList.toggle('open');updateCostDisplay();}
 function setApiOk(ok){
   document.getElementById('api-dot').className=ok?'ok':'';
   document.getElementById('api-lbl').textContent=ok?'API KEY ACTIVE':'API KEY NOT SET';
@@ -1348,7 +1401,7 @@ function friendlyError(msg){
   return m;
 }
 
-function showAgentCard(id,st,brief,out){var completedAt=new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+function showAgentCard(id,st,brief,out,usage){var completedAt=new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});if(usage)lastUsage[id]=usage;
   setSba(id,st);
   var card=document.getElementById('ac-'+id);if(!card)return;
   card.classList.add('show','fade-in');
@@ -1511,10 +1564,10 @@ function callAPI(system,content,attempt,model,maxTok){
     }
     if(!r.ok)return r.text().then(function(t){throw new Error(t.slice(0,300));});
     return r.json();
-  }).then(function(d){return d.content&&d.content[0]?d.content[0].text:'';});
+  }).then(function(d){return{text:d.content&&d.content[0]?d.content[0].text:'',usage:d.usage||{input_tokens:0,output_tokens:0}};});
 }
 
-function extractJSON(raw){
+function extractJSON(raw){if(typeof raw==='object'&&raw.text)raw=raw.text;
   var clean=raw.replace(/```json|```/gi,'').trim();
   try{return JSON.parse(clean);}catch(e){}
   var s=clean.indexOf('{'),en=clean.lastIndexOf('}');
@@ -1531,7 +1584,7 @@ function retryAgent(id){
 }
 
 /* ── MAIN RUN ─────────────────────────────────────── */
-function doneState(ok){
+function doneState(ok){document.getElementById('followup-sec').style.display=ok?'block':'none';if(ok){var fu=document.getElementById('followup-agents');fu.innerHTML=lastAgents.map(function(id){return'<label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-family:DM Mono,monospace;font-size:9px;color:var(--text-muted)" class="fu-label"><input type="checkbox" class="fu-chk" data-agent="'+id+'" checked style="accent-color:var(--gold)"> '+(AN[id]||id).toUpperCase()+'</label>';}).join('');}}
   document.getElementById('runbtn').disabled=false;updateRunBtn();
   if(ok){document.getElementById('rstbtn').style.display='inline-block';document.getElementById('pdfbtn').style.display='inline-block';}
   running=false;
@@ -1632,7 +1685,7 @@ callAPI(SP.synthesis,synInput,1,MODELS.orchestrator,TOKENS.synthesis).then(funct
       document.getElementById('syn-card').scrollIntoView({behavior:'smooth',block:'start'});
       setFredrick('done',lastSummary,lastAgents);setSba('fredrick','done');
       setPhase('COMPLETE','var(--cfo)');
-      doneState(true);saveToHistory(task,lastSummary);
+      doneState(true);saveToHistory(task,lastSummary);var runCost=0;Object.keys(lastUsage).forEach(function(k){var u=lastUsage[k];if(u)runCost+=calcCost(u,k==='synthesis'?MODELS.orchestrator:MODELS.specialist);});saveCost(runCost);updateCostDisplay();
     }).catch(function(e){showErr('Synthesis failed: '+e.message);doneState(false);});
   });
 }
@@ -1827,7 +1880,7 @@ ft:4px solid #9A7830;display:flex;align-items:center;gap:9px}'
 function escHtml(t){return(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
 /* ── RESET ────────────────────────────────────────── */
-function resetAll(){
+function resetAll(){document.getElementById('followup-sec').style.display='none';
   document.getElementById('task').value='';
   document.getElementById('errbox').style.display='none';
   document.getElementById('results').style.display='none';
