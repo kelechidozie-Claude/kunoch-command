@@ -12,10 +12,77 @@
 <link rel="apple-touch-icon" href="./icon-192.png">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js">
+document.addEventListener('keydown',function(e){if(e.key!=='Escape')return;if(document.getElementById('modal-backdrop').classList.contains('open')){closeBizModal();return;}if(document.getElementById('api-panel').classList.contains('open')){toggleApi();return;}if(document.getElementById('biz-menu').classList.contains('open')){closeBizMenu();return;}});
+
+/* ── MODAL FOCUS TRAP ────────────────────────── */
+document.getElementById('modal-backdrop').addEventListener('keydown',function(e){
+  if(e.key!=='Tab')return;
+  var m=document.getElementById('modal');
+  var focusable=m.querySelectorAll('button,input,select,textarea,[href]');
+  if(!focusable.length)return;
+  var first=focusable[0],last=focusable[focusable.length-1];
+  if(e.shiftKey&&document.activeElement===first){last.focus();e.preventDefault();}
+  else if(!e.shiftKey&&document.activeElement===last){first.focus();e.preventDefault();}
+});
+
+/* ── ONBOARDING STATE ────────────────────────── */
+(function(){
+  var ob=document.getElementById('onboarding');
+  if(!ob)return;
+  var hasKey=!!localStorage.getItem('kc_api_key');
+  var hasHist=false;
+  try{var h=JSON.parse(localStorage.getItem('kc_history_v3')||'{}');hasHist=Object.keys(h).length>0;}catch(e){}
+  ob.style.display=(!hasKey&&!hasHist)?'block':'none';
+})();
+
+/* ── AUTO-SAVE DIRECTIVE ─────────────────────── */
+(function(){
+  var t=document.getElementById('task');
+  if(!t)return;
+  var saved=localStorage.getItem('kc_draft');
+  if(saved)t.value=saved;
+  var to;
+  t.addEventListener('input',function(){
+    clearTimeout(to);
+    to=setTimeout(function(){localStorage.setItem('kc_draft',t.value);},300);
+  });
+})();
+
+function toggleStar(id){
+  var btn=document.getElementById('star-'+id);if(!btn)return;
+  btn.classList.toggle('on');
+  // Persist in the current run's history entry if it exists
+  var h=JSON.parse(localStorage.getItem('kc_history_v3')||'{}');
+  var biz=h[activeBizId]||[];
+  if(biz.length&&biz[0].id===lastRunId){
+    if(!biz[0].stars)biz[0].stars=[];
+    var idx=biz[0].stars.indexOf(id);
+    if(idx>-1)biz[0].stars.splice(idx,1);else biz[0].stars.push(id);
+    localStorage.setItem('kc_history_v3',JSON.stringify(h));
+  }
+}
+
+function countWords(s){return(s||'').trim().split(/\s+/).filter(function(w){return w.length>0;}).length;}
+function countTokens(s){return Math.round(countWords(s)*1.3);}
+function fmtCount(s){var w=countWords(s);var t=countTokens(s);return w+' words · ~'+t+' tokens';}
+
+function toggleTaskFullscreen(){
+  var fs=document.getElementById('task-fs');var ta=document.getElementById('task');var fsta=document.getElementById('task-fs-ta');
+  if(fs.classList.contains('open')){ta.value=fsta.value;fs.classList.remove('open');ta.focus();}
+  else{fsta.value=ta.value;fs.classList.add('open');fsta.focus();}
+}
+
+/* ── OFFLINE INDICATOR ───────────────────────── */
+(function(){
+  var dot=document.getElementById('conn-status');if(!dot)return;
+  function set(){dot.classList.toggle('offline',!navigator.onLine);dot.title=navigator.onLine?'Online':'Offline';}
+  set();window.addEventListener('online',set);window.addEventListener('offline',set);
+})();
+</script>
 <style>
 :root{
-  --gold:#C9A84C;--gold-dim:#C9A84C44;--gold-glow:#C9A84C14;
+  --gold:#C9A84C;--gold-dim:#C9A84C44;--gold-glow:#C9A84C33;
   --bg:#08090D;--surface:#0E1018;--surface2:#141620;--surface3:#1A1D2B;
   --border:#1E2235;--border2:#252840;
   --text:#EDF0F7;--text-dim:#B4BCCB;--text-muted:#8A94A6;
@@ -50,7 +117,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 
 .sba{display:flex;align-items:center;gap:9px;padding:8px 8px;border-radius:var(--r);margin-bottom:1px;transition:background .2s}
 .sba:hover{background:var(--surface2)}
-.sba-dot{width:7px;height:7px;border-radius:50%;background:var(--border2);transition:all .4s;flex-shrink:0}
+.sba-dot{width:9px;height:9px;border-radius:50%;background:var(--border2);transition:all .4s;flex-shrink:0}
 .sba-info{flex:1;min-width:0}
 .sba-name{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:1px;color:var(--text-muted);transition:color .4s}
 .sba-role{font-size:11px;color:var(--text-dim);opacity:.6;margin-top:1px}
@@ -66,7 +133,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 /* HISTORY */
 #sb-hist-lbl{font-family:'DM Mono',monospace;font-size:9px;color:var(--text-muted);letter-spacing:2px;padding:0 22px;margin-bottom:6px;margin-top:4px}
 #sb-history{padding:0 14px}
-.hist-item{padding:7px 10px;border-radius:var(--r);background:var(--surface2);border:1px solid var(--border);margin-bottom:5px;cursor:pointer;transition:all .2s}
+.hist-item{padding:7px 10px;border-radius:var(--r);background:var(--surface2);border:1px solid var(--border);margin-bottom:5px;cursor:pointer;transition:all .2s;position:relative}.hist-compare{position:absolute;right:8px;top:50%;transform:translateY(-50%);width:14px;height:14px;border-radius:2px;border:1px solid var(--border);background:var(--bg);appearance:none;-webkit-appearance:none;cursor:pointer}.hist-compare:checked{background:var(--gold);border-color:var(--gold)}
 .hist-item:hover{border-color:var(--gold-dim)}
 .hist-task{font-size:10px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .hist-meta{font-family:'DM Mono',monospace;font-size:9px;color:var(--text-muted);margin-top:2px;letter-spacing:1px}
@@ -110,7 +177,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 .fpill-name{color:var(--text-dim);max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .fpill-rm{background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:12px;line-height:1;margin-left:2px}
 .fpill-rm:hover{color:var(--legal)}
-#proc-note{font-family:'DM Mono',monospace;font-size:10px;color:#D9BC6B;letter-spacing:2px;margin-top:8px;display:none}
+#proc-note{font-family:'DM Mono',monospace;font-size:10px;color:#D9BC6B;letter-spacing:2px;margin-top:8px;display:none}#proc-note .spin{display:inline-block;width:10px;height:10px;border:2px solid var(--gold-dim);border-top-color:var(--gold);border-radius:50%;animation:spin 1s linear infinite}
 
 /* DIRECTIVE */
 #dir-sec{margin-bottom:20px}
@@ -204,7 +271,17 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 .pulse{animation:pulse 1.2s ease-in-out infinite}
 .fade-in{animation:fadeIn .35s ease forwards}
 .spin{display:inline-block;animation:spin 1s linear infinite}
-::-webkit-scrollbar{width:3px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+.proc-ring{display:inline-block;width:11px;height:11px;border:2px solid var(--gold-dim);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite;margin-right:8px;vertical-align:middle}
+
+/* Confirmation sheet */
+#cfm-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:300;display:none;align-items:center;justify-content:center;padding:20px}
+#cfm-backdrop.open{display:flex}
+#cfm-box{background:var(--surface);border:1px solid var(--border2);border-radius:var(--r);width:100%;max-width:420px;padding:24px 28px;box-shadow:0 8px 40px rgba(0,0,0,0.6)}
+#cfm-title{font-family:'Playfair Display',serif;font-size:16px;color:var(--gold);margin-bottom:6px}
+#cfm-msg{font-size:12px;color:var(--text-dim);line-height:1.6;margin-bottom:20px}
+#cfm-row{display:flex;gap:10px;justify-content:flex-end}
+#cfm-row .mbtn{padding:8px 18px}
+::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--gold-dim);border-radius:2px}
 
 /* ── BUSINESS SWITCHER (topbar) ───────────────── */
 #biz-switcher{position:relative;display:flex;align-items:center;gap:12px}
@@ -321,7 +398,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 
   <div id="sb-footer">
     <div id="api-row" onclick="toggleApi()">
-      <div id="api-dot"></div>
+      <div id="api-dot"></div><div id="conn-status" style="width:6px;height:6px;border-radius:50%;background:var(--cfo);flex-shrink:0;margin-left:auto" title="Online"></div>
       <div id="api-lbl">API KEY NOT SET</div>
       <span style="font-size:10px;color:var(--text-muted)">▾</span>
     </div>
@@ -366,15 +443,15 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
         <div id="dz-title">DROP FILES OR CLICK TO BROWSE</div>
         <div id="dz-sub">PDF · Word · Excel · PowerPoint · CSV · TXT · Images · Markdown</div>
       </div>
-      <div id="proc-note"><span class="spin">◌</span>&nbsp; PROCESSING...</div>
+      <div id="proc-note"><span class="proc-ring"></span> PROCESSING...</div>
       <div id="file-pills"></div>
     </div>
 
     <!-- DIRECTIVE -->
-    <div id="dir-sec">
+    <div id="dir-sec" style="position:relative"><button id="task-expand" onclick="toggleTaskFullscreen()" style="position:absolute;right:12px;top:12px;background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:14px;z-index:2" title="Fullscreen">⛶</button>
       <div class="sec-lbl">DIRECTIVE TO FREDRICK</div>
       <textarea id="task" placeholder="Issue your directive. In AUTO mode, Fredrick selects the right agents. In MANUAL mode, you choose which agents run.&#10;&#10;Examples:&#10;• Model the 3-year IRR for the Cirquu equity stake at 3 exit scenarios&#10;• Review this MOU and flag the legal exposure before I sign&#10;• Structure the Vertex PPP framework for Liberia passport contract renewal&#10;• Assess whether to acquire or partner with this logistics company"></textarea>
-      <div id="task-hint">⌘ + ENTER TO RUN</div>
+      <div id="task-hint"><span id="run-hint-key">⌘</span> + ENTER TO RUN</div>
       <div id="biz-ctx-note">DIRECTIVE WILL BE SCOPED TO <span id="biz-ctx-name">—</span></div>
     </div>
 
@@ -386,7 +463,40 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
     <div id="errbox"></div>
 
     <!-- RESULTS -->
-    <div id="results">
+    <div id="onboarding" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:28px 32px;margin-bottom:20px;text-align:center">
+  <div style="font-family:'Playfair Display',serif;font-size:18px;color:var(--gold);margin-bottom:8px">Welcome to Kunoch Command</div>
+  <div style="font-size:11px;color:var(--text-dim);margin-bottom:20px;line-height:1.6">Fredrick is ready. Three steps to your first executive briefing.</div>
+  <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:14px 18px;min-width:160px">
+      <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text-muted);letter-spacing:2px;margin-bottom:6px">STEP 1</div>
+      <div style="font-size:12px;color:var(--text);margin-bottom:8px">Set your API key</div>
+      <button onclick="toggleApi()" style="background:var(--gold);color:#000;border:none;border-radius:2px;padding:6px 12px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;cursor:pointer">OPEN PANEL</button>
+    </div>
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:14px 18px;min-width:160px">
+      <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text-muted);letter-spacing:2px;margin-bottom:6px">STEP 2</div>
+      <div style="font-size:12px;color:var(--text);margin-bottom:8px">Select a business</div>
+      <button onclick="toggleBizMenu(event)" style="background:var(--gold);color:#000;border:none;border-radius:2px;padding:6px 12px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;cursor:pointer">OPEN MENU</button>
+    </div>
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:14px 18px;min-width:160px">
+      <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text-muted);letter-spacing:2px;margin-bottom:6px">STEP 3</div>
+      <div style="font-size:12px;color:var(--text);margin-bottom:8px">Issue a directive</div>
+      <button onclick="document.getElementById('task').focus()" style="background:var(--gold);color:#000;border:none;border-radius:2px;padding:6px 12px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;cursor:pointer">START TYPING</button>
+    </div>
+  </div>
+</div>
+<div id="dispatch-progress" style="display:none;margin:14px 0">
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+    <div id="dp-fredrick" style="width:10px;height:10px;border-radius:50%;background:var(--border2);transition:all .3s"></div>
+    <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text-muted);letter-spacing:1px">FREDRICK</div>
+    <div style="flex:1;height:1px;background:var(--border)"></div>
+    <div id="dp-agents" style="display:flex;gap:6px"></div>
+    <div style="flex:1;height:1px;background:var(--border)"></div>
+    <div id="dp-synthesis" style="width:10px;height:10px;border-radius:50%;background:var(--border2);transition:all .3s"></div>
+    <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text-muted);letter-spacing:1px">SYNTHESIS</div>
+  </div>
+  <div id="dp-status" style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text-dim);letter-spacing:1px;text-align:center"></div>
+</div>
+<div id="results">
       <div id="fcard">
         <div id="f-top"><div><div id="f-name">Fredrick</div><div id="f-role">CHIEF OF STAFF — TASK COORDINATION</div></div><div id="f-badge">ACTIVE</div></div>
         <div id="f-sum"></div>
@@ -402,7 +512,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
             <div class="acard-top"><div><div class="acard-name" style="color:var(--cfo)">CFO — FINANCIAL MODELLING</div><div class="acard-role">Revenue Models · IRR · NPV · P&amp;L</div></div><div class="acard-badge" id="ab-cfo" style="color:var(--cfo);background:var(--cfo)18;border:1px solid var(--cfo)33">—</div></div>
             <div class="acard-brief" id="abr-cfo" onclick="toggleBrief('cfo')"><div class="acard-brief-lbl" style="color:var(--cfo)">FREDRICK'S BRIEF ▾</div><div class="acard-brief-text" id="abt-cfo"></div></div>
             <div class="acard-body" id="ao-cfo"></div>
-            <div class="acard-footer"><button class="retry-btn" id="ar-cfo" onclick="retryAgent('cfo')">↺ RETRY</button><button class="copy-btn" onclick="copyOutput('cfo')">COPY</button></div>
+            <div class="acard-footer"><button class="acard-star" id="star-cfo" onclick="toggleStar('cfo')">★</button><button class="retry-btn" id="ar-cfo" onclick="retryAgent('cfo')">↺ RETRY</button><button class="copy-btn" onclick="copyOutput('cfo')">COPY</button></div>
           </div>
         </div>
 
@@ -412,7 +522,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
             <div class="acard-top"><div><div class="acard-name" style="color:var(--legal)">LEGAL ADVISOR</div><div class="acard-role">Contracts · IP · Multi-jurisdiction</div></div><div class="acard-badge" id="ab-legal" style="color:var(--legal);background:var(--legal)18;border:1px solid var(--legal)33">—</div></div>
             <div class="acard-brief" id="abr-legal" onclick="toggleBrief('legal')"><div class="acard-brief-lbl" style="color:var(--legal)">FREDRICK'S BRIEF ▾</div><div class="acard-brief-text" id="abt-legal"></div></div>
             <div class="acard-body" id="ao-legal"></div>
-            <div class="acard-footer"><button class="retry-btn" id="ar-legal" onclick="retryAgent('legal')">↺ RETRY</button><button class="copy-btn" onclick="copyOutput('legal')">COPY</button></div>
+            <div class="acard-footer"><button class="acard-star" id="star-legal" onclick="toggleStar('legal')">★</button><button class="retry-btn" id="ar-legal" onclick="retryAgent('legal')">↺ RETRY</button><button class="copy-btn" onclick="copyOutput('legal')">COPY</button></div>
           </div>
         </div>
 
@@ -422,7 +532,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
             <div class="acard-top"><div><div class="acard-name" style="color:var(--ma)">M&amp;A STRATEGIST</div><div class="acard-role">Deals · Valuation · Due Diligence</div></div><div class="acard-badge" id="ab-ma" style="color:var(--ma);background:var(--ma)18;border:1px solid var(--ma)33">—</div></div>
             <div class="acard-brief" id="abr-ma" onclick="toggleBrief('ma')"><div class="acard-brief-lbl" style="color:var(--ma)">FREDRICK'S BRIEF ▾</div><div class="acard-brief-text" id="abt-ma"></div></div>
             <div class="acard-body" id="ao-ma"></div>
-            <div class="acard-footer"><button class="retry-btn" id="ar-ma" onclick="retryAgent('ma')">↺ RETRY</button><button class="copy-btn" onclick="copyOutput('ma')">COPY</button></div>
+            <div class="acard-footer"><button class="acard-star" id="star-ma" onclick="toggleStar('ma')">★</button><button class="retry-btn" id="ar-ma" onclick="retryAgent('ma')">↺ RETRY</button><button class="copy-btn" onclick="copyOutput('ma')">COPY</button></div>
           </div>
         </div>
 
@@ -432,7 +542,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
             <div class="acard-top"><div><div class="acard-name" style="color:var(--ppp)">PPP CONSULTANT</div><div class="acard-role">Gov't Contracts · Liberia · Nigeria</div></div><div class="acard-badge" id="ab-ppp" style="color:var(--ppp);background:var(--ppp)18;border:1px solid var(--ppp)33">—</div></div>
             <div class="acard-brief" id="abr-ppp" onclick="toggleBrief('ppp')"><div class="acard-brief-lbl" style="color:var(--ppp)">FREDRICK'S BRIEF ▾</div><div class="acard-brief-text" id="abt-ppp"></div></div>
             <div class="acard-body" id="ao-ppp"></div>
-            <div class="acard-footer"><button class="retry-btn" id="ar-ppp" onclick="retryAgent('ppp')">↺ RETRY</button><button class="copy-btn" onclick="copyOutput('ppp')">COPY</button></div>
+            <div class="acard-footer"><button class="acard-star" id="star-ppp" onclick="toggleStar('ppp')">★</button><button class="retry-btn" id="ar-ppp" onclick="retryAgent('ppp')">↺ RETRY</button><button class="copy-btn" onclick="copyOutput('ppp')">COPY</button></div>
           </div>
         </div>
 
@@ -442,7 +552,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
             <div class="acard-top"><div><div class="acard-name" style="color:var(--board)">BOARD ADVISOR</div><div class="acard-role">Governance · Family Office · Exit</div></div><div class="acard-badge" id="ab-board" style="color:var(--board);background:var(--board)18;border:1px solid var(--board)33">—</div></div>
             <div class="acard-brief" id="abr-board" onclick="toggleBrief('board')"><div class="acard-brief-lbl" style="color:var(--board)">FREDRICK'S BRIEF ▾</div><div class="acard-brief-text" id="abt-board"></div></div>
             <div class="acard-body" id="ao-board"></div>
-            <div class="acard-footer"><button class="retry-btn" id="ar-board" onclick="retryAgent('board')">↺ RETRY</button><button class="copy-btn" onclick="copyOutput('board')">COPY</button></div>
+            <div class="acard-footer"><button class="acard-star" id="star-board" onclick="toggleStar('board')">★</button><button class="retry-btn" id="ar-board" onclick="retryAgent('board')">↺ RETRY</button><button class="copy-btn" onclick="copyOutput('board')">COPY</button></div>
           </div>
         </div>
 
@@ -452,7 +562,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
             <div class="acard-top"><div><div class="acard-name" style="color:var(--tech)">TECH ARCHITECT</div><div class="acard-role">AI · SaaS · Digital Infrastructure</div></div><div class="acard-badge" id="ab-tech" style="color:var(--tech);background:var(--tech)18;border:1px solid var(--tech)33">—</div></div>
             <div class="acard-brief" id="abr-tech" onclick="toggleBrief('tech')"><div class="acard-brief-lbl" style="color:var(--tech)">FREDRICK'S BRIEF ▾</div><div class="acard-brief-text" id="abt-tech"></div></div>
             <div class="acard-body" id="ao-tech"></div>
-            <div class="acard-footer"><button class="retry-btn" id="ar-tech" onclick="retryAgent('tech')">↺ RETRY</button><button class="copy-btn" onclick="copyOutput('tech')">COPY</button></div>
+            <div class="acard-footer"><button class="acard-star" id="star-tech" onclick="toggleStar('tech')">★</button><button class="retry-btn" id="ar-tech" onclick="retryAgent('tech')">↺ RETRY</button><button class="copy-btn" onclick="copyOutput('tech')">COPY</button></div>
           </div>
         </div>
 
@@ -462,14 +572,14 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
             <div class="acard-top"><div><div class="acard-name" style="color:var(--research)">RESEARCH INTEL</div><div class="acard-role">Market Data · Competitors · Trends</div></div><div class="acard-badge" id="ab-research" style="color:var(--research);background:var(--research)18;border:1px solid var(--research)33">—</div></div>
             <div class="acard-brief" id="abr-research" onclick="toggleBrief('research')"><div class="acard-brief-lbl" style="color:var(--research)">FREDRICK'S BRIEF ▾</div><div class="acard-brief-text" id="abt-research"></div></div>
             <div class="acard-body" id="ao-research"></div>
-            <div class="acard-footer"><button class="retry-btn" id="ar-research" onclick="retryAgent('research')">↺ RETRY</button><button class="copy-btn" onclick="copyOutput('research')">COPY</button></div>
+            <div class="acard-footer"><button class="acard-star" id="star-research" onclick="toggleStar('research')">★</button><button class="retry-btn" id="ar-research" onclick="retryAgent('research')">↺ RETRY</button><button class="copy-btn" onclick="copyOutput('research')">COPY</button></div>
           </div>
         </div>
 
       </div>
 
       <div id="syn-card">
-        <div id="syn-hdr"><div id="syn-title">Executive Briefing</div><div id="syn-lbl">FREDRICK'S SYNTHESIS</div></div>
+        <div id="syn-hdr"><div id="syn-title">Executive Briefing</div><div id="syn-wc" style="font-family:DM Mono,monospace;font-size:8px;color:var(--text-muted);letter-spacing:1px;margin-top:4px"></div><div id="syn-lbl">FREDRICK'S SYNTHESIS</div></div>
         <div id="syn-body"></div>
         <div id="syn-footer"><button class="copy-btn" onclick="copySyn()">COPY BRIEFING</button></div>
       </div>
@@ -916,7 +1026,7 @@ function openBizModal(target){
   document.getElementById('modal-backdrop').classList.add('open');
 }
 
-function closeBizModal(){document.getElementById('modal-backdrop').classList.remove('open');editingBizId=null;}
+function closeBizModal(){document.getElementById('modal-backdrop').classList.remove('open');editingBizId=null;window._importData=null;var tabs=document.getElementById('modal-tabs');if(tabs)tabs.style.display='flex';}
 
 function switchTab(tab){
   document.querySelectorAll('.mtab').forEach(function(t){t.classList.toggle('active',t.dataset.tab===tab);});
@@ -1238,7 +1348,7 @@ function friendlyError(msg){
   return m;
 }
 
-function showAgentCard(id,st,brief,out){
+function showAgentCard(id,st,brief,out){var completedAt=new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
   setSba(id,st);
   var card=document.getElementById('ac-'+id);if(!card)return;
   card.classList.add('show','fade-in');
@@ -1268,14 +1378,14 @@ function exportData(){
   document.body.appendChild(a);a.click();document.body.removeChild(a);
   setTimeout(function(){URL.revokeObjectURL(a.href);},5000);
 }
-function importData(input){
+async function importData(input){
   var f=input.files&&input.files[0];if(!f)return;
   var reader=new FileReader();
   reader.onload=function(){
     try{
       var data=JSON.parse(reader.result);
       if(!data.businesses||!Array.isArray(data.businesses))throw new Error('Not a Kunoch backup file');
-      if(!confirm('Import backup from '+(data.exported||'unknown date')+'? This REPLACES current businesses and history on this device.'))return;
+      var ok=await confirmSheet('Import backup from '+(data.exported||'unknown date')+'? This REPLACES current businesses and history on this device.','Import Backup');if(!ok)return;
       localStorage.setItem('kc_businesses',JSON.stringify(data.businesses));
       if(data.active)localStorage.setItem('kc_active_biz',data.active);
       localStorage.setItem('kc_history_v3',JSON.stringify(data.history||{}));
@@ -1286,6 +1396,34 @@ function importData(input){
   };
   reader.readAsText(f);
 }
+
+/* ── PLATFORM HINT ─────────────────────────────── */
+(function(){
+  var isMac=navigator.platform.toUpperCase().indexOf('MAC')>=0;
+  var k=document.getElementById('run-hint-key');if(k)k.textContent=isMac?'⌘':'Ctrl';
+})();
+
+/* ── ESCAPE TO CLOSE ───────────────────────────── */
+document.addEventListener('keydown',function(e){
+  if(e.key==='Escape'){
+    document.getElementById('api-panel').classList.remove('open');
+    closeBizMenu();
+    closeConfirm();
+  }
+});
+
+/* ── CONFIRMATION SHEET ────────────────────────── */
+var confirmResolve=null;
+function confirmSheet(msg,title){
+  return new Promise(function(res){
+    confirmResolve=res;
+    document.getElementById('cfm-title').textContent=title||'Confirm';
+    document.getElementById('cfm-msg').textContent=msg||'Are you sure?';
+    document.getElementById('cfm-backdrop').classList.add('open');
+  });
+}
+function closeConfirm(){document.getElementById('cfm-backdrop').classList.remove('open');if(confirmResolve){confirmResolve(false);confirmResolve=null;}}
+function doConfirm(){document.getElementById('cfm-backdrop').classList.remove('open');if(confirmResolve){confirmResolve(true);confirmResolve=null;}}
 
 /* Run button shows the active business — scope is in your click path */
 function updateRunBtn(){
@@ -1485,9 +1623,10 @@ function runWithPlan(plan,task,docNote){
     var si='DIRECTIVE: '+task+'\n\n'+Object.keys(outputs).map(function(id){return'=== '+(AN[id]||id).toUpperCase()+' ===\n'+outputs[id];}).join('\n\n');
     var biz=getActiveBiz();
     var synInput=biz?formatBizContext(biz)+'\n\n'+si:si;
-    callAPI(SP.synthesis,synInput,1,MODELS.orchestrator,TOKENS.synthesis).then(function(o){
+    function renderSynthesis(s){var c='';if(lastAgents&&lastAgents.length){c='<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--text-muted);letter-spacing:1px;margin-bottom:14px">Contributing agents: '+lastAgents.map(function(a){return(AN[a]||a).toUpperCase();}).join(' · ')+'</div>';}return c+mdToHtml(s);}
+callAPI(SP.synthesis,synInput,1,MODELS.orchestrator,TOKENS.synthesis).then(function(o){
       lastSynthesis=o;
-      document.getElementById('syn-body').innerHTML=mdToHtml(o);
+      document.getElementById('syn-body').innerHTML=renderSynthesis(o);var swc=document.getElementById('syn-wc');if(swc)swc.textContent=fmtCount(o);
       document.getElementById('syn-card').style.display='block';
       document.getElementById('syn-card').classList.add('fade-in');
       document.getElementById('syn-card').scrollIntoView({behavior:'smooth',block:'start'});
@@ -1555,7 +1694,7 @@ function openRun(h){
     if(lastOutputs[id])showAgentCard(id,'done',lastBriefs[id]||'',lastOutputs[id]);
   });
   if(lastSynthesis){
-    document.getElementById('syn-body').innerHTML=mdToHtml(lastSynthesis);
+    document.getElementById('syn-body').innerHTML=renderSynthesis(lastSynthesis);
     document.getElementById('syn-card').style.display='block';
   }
   document.getElementById('results').style.display='block';
@@ -1609,7 +1748,8 @@ function downloadPDF(){
     +'.tag{font-family:"DM Mono",monospace;font-size:6.5pt;letter-spacing:1.5px;padding:3px 11px;border:1px solid #D8C9A0;color:#9A7830;border-radius:20px;margin-right:6px;display:inline-block}'
     /* agent sections */
     +'.agent{margin-bottom:22px;page-break-inside:avoid;border:1px solid #EDEFF2;border-radius:4px;overflow:hidden}'
-    +'.agent-hd{font-family:"DM Mono",monospace;font-size:9pt;font-weight:500;letter-spacing:2.5px;color:#1A1D24;padding:11px 18px;background:#FAFBFC;border-left:4px solid #9A7830;display:flex;align-items:center;gap:9px}'
+    +'.agent-hd{font-family:"DM Mono",monospace;font-size:9pt;font-weight:500;letter-spacing:2.5px;color:#1A1D24;padding:11px 18px;background:#FAFBFC;border-le.acard-star{background:none;border:none;color:var(--border2);cursor:pointer;font-size:12px;padding:0;margin-right:6px;transition:color .2s}.acard-star:hover{color:var(--gold)}.acard-star.on{color:var(--gold)}
+ft:4px solid #9A7830;display:flex;align-items:center;gap:9px}'
     +'.agent-dot{width:7px;height:7px;border-radius:50%;display:inline-block}'
     +'.agent-body{padding:16px 20px 18px}'
     /* rendered markdown */
@@ -1620,7 +1760,8 @@ function downloadPDF(){
     +'.agent-body ul,.synbox ul{margin:7px 0 9px 2px;list-style:none}'
     +'.agent-body ol,.synbox ol{margin:7px 0 9px 20px}'
     +'.agent-body li,.synbox li{margin-bottom:5px;color:#2A2E36}'
-    +'.agent-body ul li{position:relative;padding-left:15px}'
+    +'.agent-body ul#task-fs{position:fixed;inset:0;background:var(--bg);z-index:300;display:none;padding:40px}#task-fs.open{display:block}#task-fs textarea{width:100%;height:calc(100% - 60px);background:var(--surface);border:1px solid var(--border);border-left:2px solid var(--gold);border-radius:var(--r);color:var(--text);padding:20px;font-size:14px;font-family:'DM Sans',sans-serif;resize:none;outline:none;line-height:1.8}#task-fs-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}#task-fs-hdr span{font-family:'Playfair Display',serif;font-size:16px;color:var(--gold)}
+ li{position:relative;padding-left:15px}'
     +'.agent-body ul li::before,.synbox ul li::before{content:"›";position:absolute;left:2px;color:#9A7830;font-weight:600}'
     +'.synbox ul li{position:relative;padding-left:15px}'
     /* executive briefing */
@@ -1631,7 +1772,8 @@ function downloadPDF(){
     +'.footer{margin-top:30px;border-top:1px solid #EAEAEA;padding-top:10px;font-family:"DM Mono",monospace;font-size:6.5pt;color:#BFC4CC;letter-spacing:1.5px;display:flex;justify-content:space-between}'
     +'@page{margin:18mm 16mm}'
     +'@media print{body{padding:0}.agent,.synwrap{page-break-inside:avoid}}'
-    +'</style></head><body><div class="page">';
+    +'#conn-status{transition:background .3s}#conn-status.offline{background:var(--legal)}
+</style></head><body><div class="page">';
   // letterhead
   h+='<div class="lh"><div class="lh-l"><div class="logo">Kunoch Command</div>'
     +'<div class="sub">FAMILY OFFICE · EXECUTIVE INTELLIGENCE · CONFIDENTIAL</div></div>'
@@ -1645,12 +1787,23 @@ function downloadPDF(){
     +'<div class="tags">'+tags+'</div>';
   // specialist outputs
   h+='<div class="sec">SPECIALIST OUTPUTS</div>'+agSec;
+  // context appendix
+  if(biz){
+    h+='<div class=\'sec\'>BUSINESS CONTEXT</div>';
+    h+='<div style=\'background:#F7F8FA;border:1px solid #EDEFF2;padding:14px 18px;border-radius:3px;margin-bottom:16px\'>';
+    h+='<div style=\'font-family:DM Mono,monospace;font-size:8pt;color:#9A7830;letter-spacing:2px;margin-bottom:6px\'>'+(biz.name||'').toUpperCase()+'</div>';
+    h+='<div style=\'font-size:10pt;color:#3A3F48;line-height:1.6\'>';
+    if(biz.positioning)h+='<p><strong>Positioning:</strong> '+escHtml(biz.positioning)+'</p>';
+    if(biz.stage)h+='<p><strong>Stage:</strong> '+escHtml(biz.stage)+'</p>';
+    if(biz.jurisdictions)h+='<p><strong>Jurisdictions:</strong> '+escHtml(biz.jurisdictions)+'</p>';
+    h+='</div></div>';
+  }
   // executive briefing
   h+='<div class="synwrap"><div class="sec">EXECUTIVE BRIEFING</div>'
     +'<div class="synbox"><div class="syn-ttl">Fredrick\u2019s Executive Briefing</div>'
     +mdToHtml(lastSynthesis)+'</div></div>';
   h+='<div class="footer"><span>KUNOCH COMMAND · CONFIDENTIAL</span><span>'+escHtml(bizName.toUpperCase())+'</span></div>';
-  h+='</div></body></html>';
+  h+='</div><div id="task-fs"><div id="task-fs-hdr"><span>Directive Editor</span><button onclick="toggleTaskFullscreen()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:18px">×</button></div><textarea id="task-fs-ta"></textarea></div></body></html>';
 
   var w=window.open('','_blank','width=900,height=700');
   if(w&&w.document){
@@ -1691,5 +1844,16 @@ function resetAll(){
   lastOutputs={};lastBriefs={};lastSynthesis='';lastSummary='';lastAgents=[];currentPlan=null;running=false;
 }
 </script>
-</body>
+<!-- Confirmation sheet -->
+<div id="cfm-backdrop">
+  <div id="cfm-box">
+    <div id="cfm-title">Confirm Import</div>
+    <div id="cfm-msg">Replace current businesses and history?</div>
+    <div id="cfm-row">
+      <button class="mbtn mbtn-cancel" onclick="closeConfirm()">CANCEL</button>
+      <button class="mbtn mbtn-save" onclick="doConfirm()">CONFIRM IMPORT</button>
+    </div>
+  </div>
+</div>
+<div id="task-fs"><div id="task-fs-hdr"><span>Directive Editor</span><button onclick="toggleTaskFullscreen()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:18px">×</button></div><textarea id="task-fs-ta"></textarea></div></body>
 </html>
