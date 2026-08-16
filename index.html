@@ -1217,6 +1217,23 @@ async function sbCheckSession(){
   updateLoginUI(false);return false;
 }
 
+/* UI wrappers — read the SYNC panel inputs and give visible feedback.
+   (Replaces inline handlers that were corrupted to `quot;` and threw
+   silently on click.) */
+function sbSignInFromUI(){
+  var em=(document.getElementById('sb-email')||{}).value||'';
+  var pw=(document.getElementById('sb-password')||{}).value||'';
+  em=em.trim();
+  if(!em||!pw){showErr('Enter your email and password, then press SIGN IN.');return;}
+  showErr('Signing in…','var(--gold)');
+  sbSignIn(em,pw).then(function(ok){if(ok)showErr('Signed in — syncing your data.','var(--gold)');});
+}
+function sbMagicLinkFromUI(){
+  var em=(document.getElementById('sb-email')||{}).value||'';
+  em=em.trim();
+  if(!em){showErr('Enter your email first, then press MAGIC LINK.');return;}
+  sbSendMagicLink(em);
+}
 async function sbSignIn(email,password){
   if(!sb&&sbInit()){}
   if(!sb){showErr('Supabase not available');return false;}
@@ -1338,7 +1355,7 @@ function updateLoginUI(isLoggedIn){
     el.innerHTML='<div style="padding:10px 14px"><div style="font-size:10px;letter-spacing:2px;color:var(--gold);margin-bottom:6px">SYNC ACTIVE</div><div style="font-size:11px;color:var(--text-dim)">'+(sbUser&&sbUser.email?sbUser.email:'')+'</div><button onclick="sbSignOut()" style="margin-top:8px" class="bk-btn">SIGN OUT</button></div>';
     sbReady=true;
   }else{
-    el.innerHTML='<div style="padding:10px 14px"><div style="font-size:10px;letter-spacing:2px;color:var(--gold);margin-bottom:6px">SIGN IN TO SYNC</div><input type="email" id="sb-email" placeholder="Email" style="width:100%;margin-bottom:6px;background:#0E1018;border:1px solid var(--border);color:var(--text);padding:6px 8px;font-size:11px;border-radius:4px"><input type="password" id="sb-password" placeholder="Password" style="width:100%;margin-bottom:6px;background:#0E1018;border:1px solid var(--border);color:var(--text);padding:6px 8px;font-size:11px;border-radius:4px"><button onclick="sbSignIn(document.getElementById(quot;sb-emailquot;).value,document.getElementById(quot;sb-passwordquot;).value)" style="width:100%;margin-bottom:4px" class="bk-btn">SIGN IN</button><button onclick="sbSendMagicLink(document.getElementById(quot;sb-emailquot;).value)" style="width:100%" class="bk-btn">MAGIC LINK</button></div>';
+    el.innerHTML='<div style="padding:10px 14px"><div style="font-size:10px;letter-spacing:2px;color:var(--gold);margin-bottom:6px">SIGN IN TO SYNC</div><input type="email" id="sb-email" placeholder="Email" style="width:100%;margin-bottom:6px;background:#0E1018;border:1px solid var(--border);color:var(--text);padding:6px 8px;font-size:11px;border-radius:4px"><input type="password" id="sb-password" placeholder="Password" style="width:100%;margin-bottom:6px;background:#0E1018;border:1px solid var(--border);color:var(--text);padding:6px 8px;font-size:11px;border-radius:4px"><button onclick="sbSignInFromUI()" style="width:100%;margin-bottom:4px" class="bk-btn">SIGN IN</button><button onclick="sbMagicLinkFromUI()" style="width:100%" class="bk-btn">MAGIC LINK</button></div>';
     sbReady=false;
   }
 }
