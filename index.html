@@ -1228,9 +1228,13 @@ async function sbSignIn(email,password){
 async function sbSendMagicLink(email){
   if(!sb&&sbInit()){}
   if(!sb)return false;
-  var r=await sb.auth.signInWithOtp({email:email});
+  // Always send the magic link back to the canonical live app, never to a
+  // local/preview page (restores the July fix — without this the link
+  // redirects to Supabase's default Site URL and sign-in never completes).
+  var redirectTo=/github\.io$/.test(location.hostname)?location.href.split('#')[0].split('?')[0]:'https://kelechidozie-claude.github.io/kunoch-command/';
+  var r=await sb.auth.signInWithOtp({email:email,options:{emailRedirectTo:redirectTo}});
   if(r.error){showErr('Magic link failed: '+r.error.message);return false;}
-  showErr('Magic link sent — check your email','var(--gold)');return true;
+  showErr('Magic link sent — check your email (link opens the live app)','var(--gold)');return true;
 }
 
 async function sbSignOut(){
