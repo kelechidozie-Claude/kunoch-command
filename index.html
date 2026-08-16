@@ -19,7 +19,9 @@
 document.addEventListener('keydown',function(e){if(e.key!=='Escape')return;if(document.getElementById('modal-backdrop').classList.contains('open')){closeBizModal();return;}if(document.getElementById('api-panel').classList.contains('open')){toggleApi();return;}if(document.getElementById('biz-menu').classList.contains('open')){closeBizMenu();return;}});
 
 /* ── MODAL FOCUS TRAP ────────────────────────── */
-document.getElementById('modal-backdrop').addEventListener('keydown',function(e){
+document.addEventListener('DOMContentLoaded',function(){
+var _mb=document.getElementById('modal-backdrop');if(!_mb)return;
+_mb.addEventListener('keydown',function(e){
   if(e.key!=='Tab')return;
   var m=document.getElementById('modal');
   var focusable=m.querySelectorAll('button,input,select,textarea,[href]');
@@ -28,6 +30,8 @@ document.getElementById('modal-backdrop').addEventListener('keydown',function(e)
   if(e.shiftKey&&document.activeElement===first){last.focus();e.preventDefault();}
   else if(!e.shiftKey&&document.activeElement===last){first.focus();e.preventDefault();}
 });
+});
+
 
 /* ── ONBOARDING STATE ────────────────────────── */
 (function(){
