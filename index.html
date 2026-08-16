@@ -750,6 +750,13 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
             <div class="mlbl">Current Challenges</div>
             <textarea class="mtxt" id="f-challenges" placeholder="Active pain points, blockers, or open questions"></textarea>
           </div>
+          <div class="mfield mgrid-full" style="display:flex;align-items:center;gap:10px;padding-top:8px;border-top:1px solid var(--border)">
+            <input type="checkbox" id="f-auto-review" style="width:16px;height:16px;cursor:pointer" />
+            <div>
+              <div style="font-size:11px;color:var(--text);font-weight:500">Auto-run Weekly Review</div>
+              <div style="font-size:9px;color:var(--text-muted)">Every Monday 07:00 Lagos · Claude generates portfolio brief</div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1316,6 +1323,8 @@ function openBizModal(target){
     var txt=document.getElementById('f-'+c);
     picker.value=txt.value||'#C9A84C';
   });
+  var autoReviewEl=document.getElementById('f-auto-review');
+  if(autoReviewEl)autoReviewEl.checked=biz?!!biz.auto_review:false;
   switchTab('profile');
   document.getElementById('modal-backdrop').classList.add('open');
 }
@@ -1355,7 +1364,8 @@ function saveBusiness(){
     tone:document.getElementById('f-tone').value.trim(),
     values:document.getElementById('f-values').value.trim(),
     dos:document.getElementById('f-dos').value.trim(),
-    donts:document.getElementById('f-donts').value.trim()
+    donts:document.getElementById('f-donts').value.trim(),
+    auto_review:document.getElementById('f-auto-review').checked
   };
   if(editingBizId){
     var idx=businesses.findIndex(function(b){return b.id===editingBizId;});
