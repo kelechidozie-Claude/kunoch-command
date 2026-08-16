@@ -1010,6 +1010,50 @@ var AN={cfo:"CFO",legal:"Legal Advisor",ma:"M&A Strategist",ppp:"PPP Consultant"
 var ACOL={cfo:"var(--cfo)",legal:"var(--legal)",ma:"var(--ma)",ppp:"var(--ppp)",board:"var(--board)",tech:"var(--tech)",research:"var(--research)"};
 var ACOLS_PDF={cfo:"#1a8a5a",legal:"#8a1a1a",ma:"#4a2a8a",ppp:"#8a4a1a",board:"#8a7030",tech:"#1a6b8a",research:"#8a2a60"};
 
+/* ── MEETING INTELLIGENCE PROMPT ─────────────── */
+var MEETING_SYSTEM=`You are a board-level meeting intelligence analyst for a Nigerian family office. Extract structured data from the meeting transcript below.
+
+Return ONLY a JSON object with this exact structure:
+{
+  "date": "YYYY-MM-DD or best guess",
+  "platform": "Zoom|Teams|Google Meet|Zoho|in-person|phone|other",
+  "attendees": ["Name, Role", "Name, Role"],
+  "agenda": "One-line purpose",
+  "decisions": ["Decision 1", "Decision 2"],
+  "action_items": [{"task":"...","owner":"...","due":"YYYY-MM-DD or relative"}],
+  "open_questions": ["Question 1"],
+  "flags": ["Governance or risk flag"],
+  "summary": "2-3 sentence executive summary"
+}
+
+Rules:
+- Use ISO dates; if relative, convert to actual date
+- Action items MUST have an owner (TBD if unclear)
+- Flag unassigned decisions, missing deadlines, governance gaps
+- Preserve Nigerian / UK / Liberian jurisdictional context
+- Board-level tone. No filler.`;
+
+var WEEKLY_REVIEW_SYSTEM=`You are Fredrick, Chief of Staff to the Group CEO of Kunoch Family Office. Write a weekly meeting intelligence brief.
+
+Input: a JSON array of meetings with decisions, action_items, open_questions, flags.
+
+Output format (Markdown):
+# WEEKLY PORTFOLIO BRIEF — [BUSINESS NAME]
+## 1. STATE OF PLAY
+[2-3 sentences on cadence and sentiment]
+## 2. DECISIONS THIS WEEK
+[Bullet list]
+## 3. ACTION ITEMS
+[Table: Task | Owner | Due | Status]
+## 4. OPEN QUESTIONS
+[Bullet list with recommended owner]
+## 5. FLAGS & RISKS
+[Red/yellow/green classification]
+## 6. NEXT WEEK PRIORITIES
+[3 specific items]
+
+Tone: investor-grade, numbers over opinions, USD/NGN/GBP clarity.`;
+
 /* ── BUSINESS MANAGEMENT ─────────────────────── */
 var DEFAULT_BUSINESSES=[
   {id:'cirquu',name:'Cirquu',legal_entity:'',jurisdictions:'Nigeria, UK',positioning:'AI-powered ERP SaaS built on Odoo, targeting African SMEs',stage:'pilot',revenue:'',currency:'USD',business_model:'SaaS subscription. GTM bundled with Insight360 consulting. Portfolio businesses serve as pilot customers for case study generation.',target_customer:'African SMEs',key_people:'Kelechi Dozie (CMO, co-founder, 25% equity)',p1:'Public launch and pilot customer acquisition',p2:'Consulting + technology bundled GTM via Insight360',p3:'Case study generation from portfolio deployments',constraints:'Protect 25% equity stake. Africa-first product decisions.',competitors:'Odoo partners, Zoho, SAP Business One, regional ERP providers',challenges:'GTM execution, pricing for African SME budgets, localisation',c1:'#4FC3F7',c2:'#0E1018',c3:'#C9A84C',font_h:'',font_b:'',tone:'Confident, technical but accessible. Speaks to African SME operators who want modern tools without enterprise complexity.',values:'Accessible · Modern · African',dos:'Lead with outcomes. Use SME-relevant examples.',donts:"Don't overuse enterprise jargon. Don't compare to SAP unprompted."},
@@ -2069,6 +2113,8 @@ ft:4px solid #9A7830;display:flex;align-items:center;gap:9px}'
         <div id="meetings-parse-status" style="margin-top:8px;font-size:10px;color:var(--text-muted)"></div>
       </div>
       <div id="meetings-list"></div>
+      <button id="weekly-review-btn" onclick="runWeeklyReview()" class="bk-btn" style="width:100%;margin-top:12px">GENERATE WEEKLY REVIEW</button>
+      <div id="weekly-review-output" style="margin-top:12px;display:none"></div>
     </div>
   </div>
 </div>
@@ -2204,8 +2250,23 @@ function storeMeeting(title,transcript,mimeType){
   loadMeetings();
 }
 
+function runWeeklyReview(){
+  var btn=document.getElementById('weekly-review-btn');
+  var out=document.getElementById('weekly-review-output');
+  if(!btn||!out)return;
+  btn.disabled=true;btn.textContent='GENERATING…';
+  generateWeeklyReview(activeBizId).then(function(text){
+    out.innerHTML='<div style="padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:4px"><div style="font-size:10px;letter-spacing:2px;color:var(--gold);margin-bottom:8px">WEEKLY REVIEW</div><div style="font-size:11px;color:var(--text);line-height:1.5">'+mdToHtml(text)+'</div></div>';
+    out.style.display='block';
+    btn.disabled=false;btn.textContent='REGENERATE WEEKLY REVIEW';
+  }).catch(function(e){
+    out.innerHTML='<div style="color:var(--legal);font-size:11px">Error: '+escHtml(e.message)+'</div>';
+    out.style.display='block';
+    btn.disabled=false;btn.textContent='GENERATE WEEKLY REVIEW';
+  });
+}
+
 function loadMeetings(){
-  var list=document.getElementById('meetings-list');
   if(!list)return;
   if(!activeBizId){list.innerHTML='';return;}
   var key='kc_meetings_'+activeBizId;
@@ -2217,28 +2278,24 @@ function loadMeetings(){
     var platform=m.platform||'imported';
     var date=m.meeting_date||m.created_at?m.created_at.split('T')[0]:'—';
     d.innerHTML='<div class="meeting-title">'+escHtml(m.title)+'</div><div class="meeting-meta"><span class="meeting-platform">'+platform+'</span>'+date+' · '+m.transcript.length+' chars</div>';
-    d.onclick=function(){alert('Meeting detail view coming in Phase 4b')}; // placeholder
+    d.onclick=function(){renderMeetingDetail(m)};
     list.appendChild(d);
   });
 }
 
 function generateWeeklyReview(bizId){
-  if(!bizId)return;
+  if(!bizId)return Promise.reject(new Error('No business'));
   var key='kc_meetings_'+bizId;
   var all=JSON.parse(localStorage.getItem(key)||'[]');
   var biz=businesses.find(function(b){return b.id===bizId;});
-  if(!all.length||!biz)return null;
+  if(!all.length||!biz)return Promise.resolve('No meetings for '+biz.name);
   var thisWeek=all.filter(function(m){var d=new Date(m.created_at||m.meeting_date);var now=new Date();var diff=(now-d)/(1000*60*60*24);return diff<=7;});
-  var summary='**WEEKLY MEETING REVIEW — '+biz.name.toUpperCase()+'**\n\n';
-  summary+='Meetings this week: '+thisWeek.length+'\n\n';
-  if(thisWeek.length){
-    summary+='**Key Discussions:**\n';
-    thisWeek.forEach(function(m,i){summary+=(i+1)+'. '+m.title+'\n';});
-  }else{
-    summary+='No meetings recorded this week.\n';
-  }
-  summary+='\n_Action items, decisions, and risk flags will be extracted here once Claude normalization is wired._';
-  return summary;
+  if(!thisWeek.length)return Promise.resolve('No meetings this week for '+biz.name);
+  var payload=JSON.stringify(thisWeek.map(function(m){return{id:m.id,title:m.title,date:m.date,decisions:m.decisions||[],action_items:m.action_items||[],open_questions:m.open_questions||[],flags:m.flags||[],summary:m.summary||''};}));
+  return callAPI(WEEKLY_REVIEW_SYSTEM,payload,1,MODELS.orchestrator,TOKENS.synthesis).then(function(o){
+    var text=typeof o==='object'?o.text:o;
+    return text;
+  });
 }
 
 </script>
