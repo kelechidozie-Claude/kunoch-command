@@ -25,6 +25,12 @@ Output format (Markdown):
 ## 6. NEXT WEEK PRIORITIES
 [3 specific, time-bound items]
 
+If the input carries an "ops" object (live snapshot from Portfolio Command —
+open/overdue task counts, active projects, top overdue items), ground the
+brief in it: cite the real numbers in STATE OF PLAY, surface overdue items in
+FLAGS & RISKS, and make at least one NEXT WEEK priority address the oldest
+overdue item. Never invent operational numbers not present in the data.
+
 Tone: investor-grade, numbers over opinions, USD/NGN/GBP clarity where relevant.
 Max 500 words.`
 
@@ -50,6 +56,63 @@ async function callClaude(system: string, content: string) {
     for (const bl of data.content) { if (bl && bl.type === 'text' && bl.text) return bl.text }
   }
   return ''
+}
+
+/* ── Portfolio Command bridge (ops snapshot) ─────────────────────────
+ * Both Portfolio Command instances expose kunoch_ops_snapshot(p_secret) —
+ * a secret-gated SECURITY DEFINER RPC (same pattern as sentinel_digest).
+ * URLs / anon keys / secrets live in this project's app_config. Failures
+ * degrade silently: reviews still generate without ops data. */
+
+interface OpsRow {
+  business: string; open_tasks: number; overdue: number; due_7d: number;
+  active_projects: number; last_activity: string | null;
+  top_overdue: { title: string; due: string; priority: string }[];
+}
+
+function normName(s: string): string {
+  return (s || '').toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
+async function fetchOpsSnapshots(): Promise<OpsRow[]> {
+  const { data: cfgRows } = await supabase
+    .from('app_config').select('key, value')
+    .in('key', ['pc_bridge_ng_url','pc_bridge_ng_key','pc_bridge_ng_secret',
+                'pc_bridge_lr_url','pc_bridge_lr_key','pc_bridge_lr_secret'])
+  const cfg: Record<string, string> = {}
+  for (const r of cfgRows || []) cfg[r.key] = r.value
+  const instances = [
+    { url: cfg.pc_bridge_ng_url, key: cfg.pc_bridge_ng_key, secret: cfg.pc_bridge_ng_secret },
+    { url: cfg.pc_bridge_lr_url, key: cfg.pc_bridge_lr_key, secret: cfg.pc_bridge_lr_secret },
+  ]
+  const rows: OpsRow[] = []
+  for (const inst of instances) {
+    if (!inst.url || !inst.key || !inst.secret) continue
+    try {
+      const res = await fetch(`${inst.url}/rest/v1/rpc/kunoch_ops_snapshot`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': inst.key, 'Authorization': `Bearer ${inst.key}` },
+        body: JSON.stringify({ p_secret: inst.secret }),
+      })
+      if (!res.ok) continue
+      const j = await res.json()
+      for (const b of (j && j.businesses) || []) rows.push(b as OpsRow)
+    } catch (_e) { /* bridge down — reviews proceed without ops */ }
+  }
+  return rows
+}
+
+/** Match a Kunoch business to its Portfolio Command row by normalized name
+ * (containment either way covers "IFTA" vs "IFTA Farms", "D4ULogistics" vs
+ * "D4U Logistics"). */
+function opsFor(rows: OpsRow[], kunochName: string): OpsRow | null {
+  const target = normName(kunochName)
+  if (!target) return null
+  for (const r of rows) {
+    const n = normName(r.business)
+    if (n === target || n.includes(target) || target.includes(n)) return r
+  }
+  return null
 }
 
 function mdToBasicHtml(md: string) {
@@ -104,6 +167,7 @@ Deno.serve(async (_req) => {
 
   const results: string[] = []
   const userEmailCache: Record<string, string> = {}
+  const opsRows = await fetchOpsSnapshots()
 
   for (const biz of businesses || []) {
     const bizData = biz.data || {}
@@ -125,6 +189,7 @@ Deno.serve(async (_req) => {
         positioning: bizData.positioning,
         priorities: [bizData.p1, bizData.p2, bizData.p3].filter(Boolean),
       },
+      ops: opsFor(opsRows, bizData.name || biz.biz_id),
       meetings: (meetings || []).map((m: any) => {
         const d = m.data || m
         return {
