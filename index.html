@@ -12,7 +12,9 @@
 <link rel="apple-touch-icon" href="./icon-192.png">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
 document.addEventListener('keydown',function(e){if(e.key!=='Escape')return;if(document.getElementById('modal-backdrop').classList.contains('open')){closeBizModal();return;}if(document.getElementById('api-panel').classList.contains('open')){toggleApi();return;}if(document.getElementById('biz-menu').classList.contains('open')){closeBizMenu();return;}});
 
 /* ── MODAL FOCUS TRAP ────────────────────────── */
@@ -1003,6 +1005,181 @@ var DEFAULT_BUSINESSES=[
 ];
 
 var businesses=[],activeBizId=null,editingBizId=null;
+
+/* ── SUPABASE PHASE 3 INTEGRATION ─────────────── */
+var SUPABASE_URL='https://eplsmeenlwbglgtnzxau.supabase.co';
+var SUPABASE_ANON='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVwbHNtZWVubHdiZ2xndG56eGF1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQyNDM3MTYsImV4cCI6MjA5OTgxOTcxNn0.ry8pf_93UetpE_TgTig438hayZwx-GOM2QxHgwjTqGg';
+var sb=null;var sbUser=null;var sbReady=false;
+
+function sbInit(){
+  if(typeof supabase==='undefined'){console.warn('Supabase library not loaded');return false;}
+  sb=supabase.createClient(SUPABASE_URL,SUPABASE_ANON,{auth:{persistSession:true,autoRefreshToken:true,storageKey:'sb-kc-auth'}});
+  return true;
+}
+
+function sbIsOnline(){return navigator.onLine;}
+
+/* ── AUTH ────────────────────────────────────── */
+async function sbCheckSession(){
+  if(!sb&&sbInit()){}
+  if(!sb)return false;
+  var r=await sb.auth.getSession();
+  if(r.data&&r.data.session){sbUser=r.data.session.user;updateLoginUI(true);return true;}
+  updateLoginUI(false);return false;
+}
+
+async function sbSignIn(email,password){
+  if(!sb&&sbInit()){}
+  if(!sb){showErr('Supabase not available');return false;}
+  var r=await sb.auth.signInWithPassword({email:email,password:password});
+  if(r.error){showErr('Sign-in failed: '+r.error.message);return false;}
+  sbUser=r.data.user;updateLoginUI(true);await sbSyncAll();return true;
+}
+
+async function sbSendMagicLink(email){
+  if(!sb&&sbInit()){}
+  if(!sb)return false;
+  var r=await sb.auth.signInWithOtp({email:email});
+  if(r.error){showErr('Magic link failed: '+r.error.message);return false;}
+  showErr('Magic link sent — check your email','var(--gold)');return true;
+}
+
+async function sbSignOut(){
+  if(!sb)return;
+  await sb.auth.signOut();sbUser=null;updateLoginUI(false);
+}
+
+/* ── SYNC: BUSINESSES ────────────────────────── */
+async function sbSyncBusinesses(){
+  if(!sb||!sbUser||!sbIsOnline())return false;
+  for(var i=0;i<businesses.length;i++){
+    var b=businesses[i];
+    await sb.from('businesses').upsert({biz_id:b.id,data:b,sort:i,updated_at:new Date().toISOString()},{onConflict:'biz_id'});
+  }
+  var r=await sb.from('businesses').select('biz_id,data,sort').order('sort',{ascending:true});
+  if(r.error){console.warn('sbSyncBusinesses pull error',r.error);return false;}
+  if(r.data&&r.data.length){
+    var merged=r.data.map(function(row){return row.data;});
+    var sbIds={};r.data.forEach(function(row){sbIds[row.biz_id]=true;});
+    businesses.forEach(function(b){if(!sbIds[b.id])merged.push(b);});
+    businesses=merged;localStorage.setItem('kc_businesses',JSON.stringify(businesses));renderBizUI();
+  }
+  return true;
+}
+
+/* ── SYNC: RUNS ──────────────────────────────── */
+async function sbSyncRuns(){
+  if(!sb||!sbUser||!sbIsOnline())return false;
+  var localHist=JSON.parse(localStorage.getItem('kc_history_v3')||'{}');
+  for(var bizId in localHist){
+    var runs=localHist[bizId]||[];
+    for(var j=0;j<runs.length;j++){
+      var run=runs[j];
+      await sb.from('runs').upsert({run_id:run.id,biz_id:bizId,data:run,updated_at:new Date().toISOString()},{onConflict:'run_id'});
+    }
+  }
+  var r=await sb.from('runs').select('biz_id,data').order('created_at',{ascending:false});
+  if(r.error){console.warn('sbSyncRuns pull error',r.error);return false;}
+  if(r.data){
+    var merged={};
+    r.data.forEach(function(row){
+      if(!merged[row.biz_id])merged[row.biz_id]=[];
+      merged[row.biz_id].push(row.data);
+    });
+    for(var bizId in localHist){
+      if(!merged[bizId])merged[bizId]=[];
+      var localIds={};merged[bizId].forEach(function(r){localIds[r.id]=true;});
+      localHist[bizId].forEach(function(run){if(!localIds[run.id])merged[bizId].push(run);});
+    }
+    localStorage.setItem('kc_history_v3',JSON.stringify(merged));
+  }
+  return true;
+}
+
+/* ── SYNC: COSTS ─────────────────────────────── */
+async function sbSyncCosts(){
+  if(!sb||!sbUser||!sbIsOnline())return false;
+  var costs=JSON.parse(localStorage.getItem('kc_costs')||'{}');
+  for(var key in costs){
+    await sb.from('monthly_costs').upsert({year_month:key,amount:costs[key],details:[]},{onConflict:'user_id,year_month'});
+  }
+  var r=await sb.from('monthly_costs').select('year_month,amount');
+  if(r.data){
+    var merged={};
+    r.data.forEach(function(row){merged[row.year_month]=row.amount;});
+    localStorage.setItem('kc_costs',JSON.stringify(merged));
+  }
+  return true;
+}
+
+/* ── SYNC: SETTINGS ──────────────────────────── */
+async function sbSyncSettings(){
+  if(!sb||!sbUser||!sbIsOnline())return false;
+  var draft=localStorage.getItem('kc_draft')||'';
+  var active=localStorage.getItem('kc_active_biz')||'';
+  await sb.from('app_settings').upsert({user_id:sbUser.id,active_business_id:active,draft_task:draft,updated_at:new Date().toISOString()},{onConflict:'user_id'});
+  var r=await sb.from('app_settings').select('active_business_id,draft_task').eq('user_id',sbUser.id).single();
+  if(r.data){
+    if(r.data.active_business_id){activeBizId=r.data.active_business_id;localStorage.setItem('kc_active_biz',activeBizId);}
+    if(r.data.draft_task){localStorage.setItem('kc_draft',r.data.draft_task);var ta=document.getElementById('task');if(ta)ta.value=r.data.draft_task;}
+  }
+  return true;
+}
+
+/* ── FULL SYNC ───────────────────────────────── */
+async function sbSyncAll(){
+  if(!sbReady||!sbUser||!sbIsOnline()){console.log('Sync skipped: not ready');return;}
+  var dot=document.getElementById('sync-dot');if(dot)dot.classList.add('spinning');
+  try{
+    await sbSyncBusinesses();await sbSyncRuns();await sbSyncCosts();await sbSyncSettings();
+    loadHistory();updateCostDisplay();console.log('Supabase sync complete');
+  }catch(e){console.warn('Sync error',e);}
+  if(dot)dot.classList.remove('spinning');
+}
+
+/* ── LOGIN UI ────────────────────────────────── */
+function updateLoginUI(isLoggedIn){
+  var el=document.getElementById('login-panel');
+  if(!el)return;
+  if(isLoggedIn){
+    el.innerHTML='<div style="padding:10px 14px"><div style="font-size:10px;letter-spacing:2px;color:var(--gold);margin-bottom:6px">SYNC ACTIVE</div><div style="font-size:11px;color:var(--text-dim)">'+(sbUser&&sbUser.email?sbUser.email:'')+'</div><button onclick="sbSignOut()" style="margin-top:8px" class="bk-btn">SIGN OUT</button></div>';
+    sbReady=true;
+  }else{
+    el.innerHTML='<div style="padding:10px 14px"><div style="font-size:10px;letter-spacing:2px;color:var(--gold);margin-bottom:6px">SIGN IN TO SYNC</div><input type="email" id="sb-email" placeholder="Email" style="width:100%;margin-bottom:6px;background:#0E1018;border:1px solid var(--border);color:var(--text);padding:6px 8px;font-size:11px;border-radius:4px"><input type="password" id="sb-password" placeholder="Password" style="width:100%;margin-bottom:6px;background:#0E1018;border:1px solid var(--border);color:var(--text);padding:6px 8px;font-size:11px;border-radius:4px"><button onclick="sbSignIn(document.getElementById(quot;sb-emailquot;).value,document.getElementById(quot;sb-passwordquot;).value)" style="width:100%;margin-bottom:4px" class="bk-btn">SIGN IN</button><button onclick="sbSendMagicLink(document.getElementById(quot;sb-emailquot;).value)" style="width:100%" class="bk-btn">MAGIC LINK</button></div>';
+    sbReady=false;
+  }
+}
+
+/* ── INIT ON LOAD ────────────────────────────── */
+window.addEventListener('load',function(){
+  sbInjectUI();
+  if(sbInit()){
+    sbCheckSession().then(function(ok){if(ok)sbSyncAll();});
+  }
+});
+window.addEventListener('online',function(){if(sbReady)sbSyncAll();});
+
+/* ── UI INJECTION ────────────────────────────── */
+function sbInjectUI(){
+  var footer=document.getElementById('sb-footer');
+  if(footer&&!document.getElementById('sync-row')){
+    var syncRow=document.createElement('div');
+    syncRow.id='sync-row';
+    syncRow.style.cssText='display:flex;align-items:center;gap:6px;padding:6px 10px;border-top:1px solid var(--border)';
+    syncRow.innerHTML='<div id="sync-dot" style="width:6px;height:6px;border-radius:50%;background:var(--text-muted);flex-shrink:0"></div><div style="font-size:9px;letter-spacing:1px;color:var(--text-muted);flex:1">SYNC</div>';
+    footer.appendChild(syncRow);
+    var loginPanel=document.createElement('div');
+    loginPanel.id='login-panel';
+    loginPanel.style.cssText='border-top:1px solid var(--border)';
+    footer.appendChild(loginPanel);
+  }
+  if(!document.getElementById('sb-spin-style')){
+    var style=document.createElement('style');
+    style.id='sb-spin-style';
+    style.textContent='#sync-dot.spinning{animation:sb-spin 1s linear infinite;background:var(--gold)!important}@keyframes sb-spin{to{transform:rotate(360deg)}}';
+    document.head.appendChild(style);
+  }
+}
 
 function loadBusinesses(){
   var raw=localStorage.getItem('kc_businesses');
