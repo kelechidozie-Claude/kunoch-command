@@ -3,6 +3,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY')!
+const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') || ''
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
@@ -44,36 +45,79 @@ async function callClaude(system: string, content: string) {
   })
   if (!res.ok) throw new Error(`Claude error ${res.status}: ${await res.text()}`)
   const data = await res.json()
-  return data.content?.[0]?.text || ''
+  // Scan for the first text block (thinking-capable models put a thinking block first)
+  if (data.content && data.content.length) {
+    for (const bl of data.content) { if (bl && bl.type === 'text' && bl.text) return bl.text }
+  }
+  return ''
 }
 
-Deno.serve(async (req) => {
-  // Fetch all businesses with auto_review enabled
+function mdToBasicHtml(md: string) {
+  const esc = md.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  return esc.split('\n').map((l) => {
+    const t = l.trim()
+    if (t.startsWith('# ')) return `<h2 style="font-family:Georgia,serif;color:#9A7830;margin:14px 0 8px">${t.slice(2)}</h2>`
+    if (t.startsWith('## ')) return `<h3 style="color:#1A1D24;margin:12px 0 6px">${t.slice(3)}</h3>`
+    if (t.startsWith('- ') || t.startsWith('* ')) return `<div style="margin:2px 0 2px 14px">&rsaquo; ${t.slice(2)}</div>`
+    if (!t) return '<div style="height:6px"></div>'
+    return `<div style="margin:2px 0">${t}</div>`
+  }).join('').replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+}
+
+async function sendReviewEmail(to: string, bizName: string, synthesis: string, from: string) {
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${RESEND_API_KEY}` },
+    body: JSON.stringify({
+      from: `Kunoch Command <${from}>`,
+      to: [to],
+      subject: `Weekly Review — ${bizName} · ${new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}`,
+      html: `<div style="font-family:Arial,Helvetica,sans-serif;color:#23272F;max-width:640px;margin:0 auto;padding:18px">
+        <div style="border-bottom:2px solid #9A7830;padding-bottom:10px;margin-bottom:16px">
+          <div style="font-family:Georgia,serif;font-size:22px;color:#9A7830;font-weight:700">Kunoch Command</div>
+          <div style="font-size:10px;color:#9AA0AB;letter-spacing:2px">FAMILY OFFICE · EXECUTIVE INTELLIGENCE · CONFIDENTIAL</div>
+        </div>
+        ${mdToBasicHtml(synthesis)}
+        <div style="border-top:1px solid #EAEAEA;margin-top:18px;padding-top:8px;font-size:10px;color:#BFC4CC;letter-spacing:1px">KUNOCH COMMAND · ${bizName.toUpperCase()} · This review is also readable in-app under MEETINGS.</div>
+      </div>`,
+    }),
+  })
+  if (!res.ok) throw new Error(`Resend ${res.status}: ${(await res.text()).slice(0, 200)}`)
+}
+
+Deno.serve(async (_req) => {
   const { data: businesses, error: bizErr } = await supabase
     .from('businesses')
-    .select('biz_id, data')
+    .select('user_id, biz_id, data')
     .contains('data', { auto_review: true })
 
   if (bizErr) {
     return new Response(JSON.stringify({ error: bizErr.message }), { status: 500 })
   }
 
+  // sender address for email delivery (optional)
+  let emailFrom = ''
+  try {
+    const { data: cfg } = await supabase.from('app_config').select('value').eq('key', 'review_email_from').maybeSingle()
+    emailFrom = (cfg && cfg.value) || ''
+  } catch (_e) { /* email disabled */ }
+
   const results: string[] = []
+  const userEmailCache: Record<string, string> = {}
 
   for (const biz of businesses || []) {
     const bizData = biz.data || {}
     if (!bizData.auto_review) continue
 
-    // Fetch meetings from last 7 days
     const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
     const { data: meetings } = await supabase
       .from('meetings')
       .select('*')
+      .eq('user_id', biz.user_id)
       .eq('biz_id', biz.biz_id)
       .gte('created_at', since)
       .order('created_at', { ascending: false })
 
-    // Build context
     const context = {
       business: {
         name: bizData.name,
@@ -81,40 +125,71 @@ Deno.serve(async (req) => {
         positioning: bizData.positioning,
         priorities: [bizData.p1, bizData.p2, bizData.p3].filter(Boolean),
       },
-      meetings: (meetings || []).map((m: any) => ({
-        title: m.title,
-        date: m.meeting_date,
-        decisions: m.decisions || [],
-        action_items: m.action_items || [],
-        open_questions: m.open_questions || [],
-        flags: m.flags || [],
-        summary: m.summary || '',
-      })),
+      meetings: (meetings || []).map((m: any) => {
+        const d = m.data || m
+        return {
+          title: d.title,
+          date: d.meeting_date,
+          decisions: d.decisions || [],
+          action_items: d.action_items || [],
+          open_questions: d.open_questions || [],
+          flags: d.flags || [],
+          summary: d.summary || '',
+        }
+      }),
     }
 
     try {
       const synthesis = await callClaude(WEEKLY_SYSTEM, JSON.stringify(context))
 
-      // Store as a run
       const runId = `auto_${biz.biz_id}_${Date.now().toString(36)}`
-      await supabase.from('runs').insert({
+      const record = {
+        id: runId,
+        task: `Weekly portfolio review — ${new Date().toLocaleDateString('en-GB')}`,
+        summary: `Automated weekly review for ${bizData.name}`,
+        agents: [],
+        briefs: {},
+        outputs: {},
+        synthesis,
+        kind: 'auto_review',
+        date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }),
+        time: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+      }
+      const { error: insErr } = await supabase.from('runs').insert({
+        user_id: biz.user_id,
         run_id: runId,
         biz_id: biz.biz_id,
-        data: {
-          id: runId,
-          task: `Weekly portfolio review — ${new Date().toLocaleDateString('en-GB')}`,
-          summary: `Automated weekly review for ${bizData.name}`,
-          agents: [],
-          briefs: {},
-          outputs: {},
-          synthesis,
-          kind: 'auto_review',
-          date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }),
-          time: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
-        },
+        data: record,
+      })
+      if (insErr) throw new Error(`store failed: ${insErr.message}`)
+
+      await supabase.from('audit_log').insert({
+        user_id: biz.user_id, action: 'auto_review.generated', entity: 'run', entity_id: runId,
+        detail: { biz: biz.biz_id, meetings: context.meetings.length },
       })
 
-      results.push(`${bizData.name}: generated`)
+      let emailNote = ''
+      if (bizData.auto_review_email && RESEND_API_KEY && emailFrom) {
+        try {
+          if (!userEmailCache[biz.user_id]) {
+            const { data: u } = await supabase.auth.admin.getUserById(biz.user_id)
+            userEmailCache[biz.user_id] = (u && u.user && u.user.email) || ''
+          }
+          const to = userEmailCache[biz.user_id]
+          if (to) {
+            await sendReviewEmail(to, bizData.name || biz.biz_id, synthesis, emailFrom)
+            emailNote = ' · emailed'
+            await supabase.from('audit_log').insert({ user_id: biz.user_id, action: 'auto_review.emailed', entity: 'run', entity_id: runId, detail: { to } })
+          } else emailNote = ' · email skipped (no address)'
+        } catch (e: any) {
+          emailNote = ` · email failed: ${e.message}`
+          await supabase.from('audit_log').insert({ user_id: biz.user_id, action: 'auto_review.email_failed', entity: 'run', entity_id: runId, detail: { error: String(e.message).slice(0, 200) } })
+        }
+      } else if (bizData.auto_review_email) {
+        emailNote = ' · email skipped (RESEND_API_KEY or review_email_from not configured)'
+      }
+
+      results.push(`${bizData.name}: generated${emailNote}`)
     } catch (e: any) {
       results.push(`${bizData.name}: error — ${e.message}`)
     }
