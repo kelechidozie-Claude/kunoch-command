@@ -1203,6 +1203,10 @@ var sb=null;var sbUser=null;var sbReady=false;
 function sbInit(){
   if(typeof supabase==='undefined'){console.warn('Supabase library not loaded');return false;}
   sb=supabase.createClient(SUPABASE_URL,SUPABASE_ANON,{auth:{persistSession:true,autoRefreshToken:true,storageKey:'sb-kc-auth'}});
+  sb.auth.onAuthStateChange(function(evt,session){
+    if(evt==='SIGNED_IN'&&session&&session.user){sbUser=session.user;updateLoginUI(true);sbSyncAll();}
+    if(evt==='SIGNED_OUT'){sbUser=null;updateLoginUI(false);}
+  });
   return true;
 }
 
@@ -1791,6 +1795,14 @@ function toggleTheme(){
 }
 
 window.onload=function(){
+  // Surface Supabase auth errors delivered in the URL hash (expired/used magic links)
+  if(location.hash&&location.hash.indexOf('error_code=')>=0){
+    var hp=new URLSearchParams(location.hash.slice(1));
+    var code=hp.get('error_code'),desc=(hp.get('error_description')||'').replace(/\+/g,' ');
+    if(code==='otp_expired')showErr('That magic link has expired or was already used — links are single-use. Request a fresh one (only the NEWEST email works), or sign in with your password.');
+    else showErr('Sign-in link error: '+(desc||code));
+    try{history.replaceState(null,'',location.pathname+location.search);}catch(e){}
+  }
   applyTheme(localStorage.getItem('kc_theme')==='light'?'light':'dark');
   var s=null;
   try{s=localStorage.getItem('kc_api_key');}catch(e){}
@@ -1993,7 +2005,10 @@ function toggleBrief(id){
   if(lbl)lbl.textContent=t.classList.contains('expanded')?'FREDRICK\'S BRIEF ▴':'FREDRICK\'S BRIEF ▾';
 }
 
-function showErr(msg){var e=document.getElementById('errbox');e.innerHTML='<strong>ERROR:</strong> '+escHtml(msg);e.style.display='block';}
+function showErr(msg,color){var e=document.getElementById('errbox');
+  if(color){e.innerHTML='<strong style="color:'+color+'">✓</strong> '+escHtml(msg);e.style.borderColor='var(--gold-dim)';}
+  else{e.innerHTML='<strong>ERROR:</strong> '+escHtml(msg);e.style.borderColor='';}
+  e.style.display='block';}
 
 function copyOutput(id){
   navigator.clipboard.writeText(lastOutputs[id]||'').then(function(){
