@@ -152,11 +152,19 @@ Deno.serve(async (_req) => {
   const { data: businesses, error: bizErr } = await supabase
     .from('businesses')
     .select('user_id, biz_id, data')
-    .contains('data', { auto_review: true })
 
   if (bizErr) {
     return new Response(JSON.stringify({ error: bizErr.message }), { status: 500 })
   }
+
+  // Global override: app_config('auto_review_all')='true' reviews EVERY
+  // business, regardless of per-business toggles (which the app's sync can
+  // clobber). Per-business auto_review still works when the override is off.
+  let autoReviewAll = false
+  try {
+    const { data: cfgAll } = await supabase.from('app_config').select('value').eq('key', 'auto_review_all').maybeSingle()
+    autoReviewAll = !!cfgAll && cfgAll.value === 'true'
+  } catch (_e) { /* default: per-business flags */ }
 
   // sender address for email delivery (optional)
   let emailFrom = ''
@@ -171,7 +179,7 @@ Deno.serve(async (_req) => {
 
   for (const biz of businesses || []) {
     const bizData = biz.data || {}
-    if (!bizData.auto_review) continue
+    if (!autoReviewAll && !bizData.auto_review) continue
 
     const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
     const { data: meetings } = await supabase
