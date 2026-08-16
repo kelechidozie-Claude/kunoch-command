@@ -52,7 +52,7 @@ Deno.serve(async (req) => {
   const { data: businesses, error: bizErr } = await supabase
     .from('businesses')
     .select('biz_id, data')
-    .eq('data->auto_review', true)
+    .contains('data', { auto_review: true })
 
   if (bizErr) {
     return new Response(JSON.stringify({ error: bizErr.message }), { status: 500 })
