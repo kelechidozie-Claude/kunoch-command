@@ -14,6 +14,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script>
 document.addEventListener('keydown',function(e){if(e.key!=='Escape')return;if(document.getElementById('modal-backdrop').classList.contains('open')){closeBizModal();return;}if(document.getElementById('api-panel').classList.contains('open')){toggleApi();return;}if(document.getElementById('biz-menu').classList.contains('open')){closeBizMenu();return;}});
 
@@ -401,6 +402,24 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 #backup-row{display:flex;gap:6px;padding:8px 0 0}
 .bk-btn{flex:1;background:transparent;border:1px solid var(--border);border-radius:2px;color:var(--text-muted);font-family:'DM Mono',monospace;font-size:9px;letter-spacing:2px;padding:6px 4px;cursor:pointer;transition:all .2s}
 .bk-btn:hover{border-color:var(--gold-dim);color:var(--gold)}
+/* ── MEETINGS ────────────────────────────────── */
+#meetings-btn{background:transparent;border:1px solid var(--border);border-radius:2px;color:var(--text-dim);font-family:'DM Mono',monospace;font-size:9px;letter-spacing:2px;padding:6px 10px;cursor:pointer;transition:all .2s;margin-right:auto}
+#meetings-btn:hover{border-color:var(--gold-dim);color:var(--gold)}
+#meetings-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:60;justify-content:flex-end}
+#meetings-backdrop.open{display:flex}
+#meetings-panel{width:420px;max-width:90vw;height:100vh;background:var(--surface);border-left:1px solid var(--border);display:flex;flex-direction:column;transform:translateX(100%);transition:transform .25s ease}
+#meetings-backdrop.open #meetings-panel{transform:translateX(0)}
+#meetings-hdr{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border)}
+#meetings-title{font-family:'Playfair Display',serif;font-size:14px;color:var(--gold);letter-spacing:1px}
+#meetings-body{flex:1;overflow-y:auto;padding:14px 18px}
+#meetings-upload{padding:14px;background:var(--bg);border:1px dashed var(--border);border-radius:4px;margin-bottom:14px}
+.meeting-item{padding:10px 12px;border:1px solid var(--border);border-radius:4px;margin-bottom:8px;cursor:pointer;transition:all .2s}
+.meeting-item:hover{border-color:var(--gold-dim)}
+.meeting-title{font-size:12px;color:var(--text);font-weight:500;margin-bottom:4px}
+.meeting-meta{font-size:9px;color:var(--text-muted);letter-spacing:1px}
+.meeting-platform{display:inline-block;padding:2px 6px;border-radius:2px;background:var(--border);font-size:8px;color:var(--text-dim);margin-right:6px;text-transform:uppercase}
+#meetings-list:empty::before{content:'NO MEETINGS YET';display:block;text-align:center;font-size:10px;color:var(--text-muted);letter-spacing:2px;padding:20px 0}
+
 </style>
 </head>
 <body>
@@ -467,6 +486,7 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 <!-- ── MAIN ──────────────────────────────────── -->
 <div id="content">
   <div id="topbar">
+    <button id="meetings-btn" onclick="toggleMeetings()">MEETINGS</button>
     <div id="biz-switcher">
       <div id="biz-lbl">ACTIVE BUSINESS</div>
       <button id="biz-btn" onclick="toggleBizMenu(event)">
@@ -2033,7 +2053,27 @@ ft:4px solid #9A7830;display:flex;align-items:center;gap:9px}'
     +'<div class="synbox"><div class="syn-ttl">Fredrick\u2019s Executive Briefing</div>'
     +mdToHtml(lastSynthesis)+'</div></div>';
   h+='<div class="footer"><span>KUNOCH COMMAND · CONFIDENTIAL</span><span>'+escHtml(bizName.toUpperCase())+'</span></div>';
-  h+='</div><div id="task-fs"><div id="task-fs-hdr"><span>Directive Editor</span><button onclick="toggleTaskFullscreen()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:18px">×</button></div><textarea id="task-fs-ta"></textarea></div></body></html>';
+  h+='</div><!-- ── MEETINGS PANEL ─────────────────────────── -->
+<div id="meetings-backdrop" onclick="if(event.target===this)toggleMeetings()">
+  <div id="meetings-panel">
+    <div id="meetings-hdr">
+      <div id="meetings-title">MEETINGS · <span id="meetings-biz">—</span></div>
+      <button onclick="toggleMeetings()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:18px">×</button>
+    </div>
+    <div id="meetings-body">
+      <div id="meetings-upload">
+        <div style="font-size:10px;letter-spacing:2px;color:var(--gold);margin-bottom:8px">UPLOAD TRANSCRIPT</div>
+        <div style="font-size:11px;color:var(--text-dim);margin-bottom:10px">VTT · SRT · DOCX · PDF · TXT</div>
+        <input type="file" id="meeting-file" accept=".vtt,.srt,.docx,.pdf,.txt" style="display:none" onchange="handleMeetingUpload(this)" />
+        <button class="bk-btn" onclick="document.getElementById('meeting-file').click()" style="width:100%">SELECT FILE</button>
+        <div id="meetings-parse-status" style="margin-top:8px;font-size:10px;color:var(--text-muted)"></div>
+      </div>
+      <div id="meetings-list"></div>
+    </div>
+  </div>
+</div>
+
+<div id="task-fs"><div id="task-fs-hdr"><span>Directive Editor</span><button onclick="toggleTaskFullscreen()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:18px">×</button></div><textarea id="task-fs-ta"></textarea></div></body></html>';
 
   var w=window.open('','_blank','width=900,height=700');
   if(w&&w.document){
@@ -2073,6 +2113,134 @@ function resetAll(){document.getElementById('followup-sec').style.display='none'
   uploadedDocs=[];renderPills();
   lastOutputs={};lastBriefs={};lastSynthesis='';lastSummary='';lastAgents=[];currentPlan=null;running=false;
 }
+/* ── MEETINGS PHASE 4 ────────────────────────── */
+var meetingsData=[];
+
+function toggleMeetings(){
+  var el=document.getElementById('meetings-backdrop');
+  if(!el)return;
+  var isOpen=el.classList.contains('open');
+  if(isOpen){el.classList.remove('open');}
+  else{
+    el.classList.add('open');
+    var biz=getActiveBiz();
+    document.getElementById('meetings-biz').textContent=biz?biz.name.toUpperCase():'—';
+    loadMeetings();
+  }
+}
+
+function handleMeetingUpload(input){
+  var file=input.files[0];
+  if(!file)return;
+  var status=document.getElementById('meetings-parse-status');
+  status.textContent='Parsing '+file.name+'…';
+  status.style.color='var(--text-dim)';
+  parseTranscript(file,function(err,text){
+    if(err){status.textContent='Error: '+err;status.style.color='var(--legal)';return;}
+    status.textContent='Parsed '+file.name+' · '+text.length+' chars';
+    status.style.color='var(--cfo)';
+    // Store in Supabase
+    storeMeeting(file.name,text,file.type);
+  });
+}
+
+function parseTranscript(file,cb){
+  var name=file.name.toLowerCase();
+  var reader=new FileReader();
+  if(name.endsWith('.txt')||name.endsWith('.vtt')||name.endsWith('.srt')){
+    reader.onload=function(e){cb(null,e.target.result);};
+    reader.onerror=function(){cb('Read failed');};
+    reader.readAsText(file);
+  }else if(name.endsWith('.docx')){
+    reader.onload=function(e){
+      mammoth.extractRawText({arrayBuffer:e.target.result}).then(function(r){cb(null,r.value);}).catch(function(){cb('DOCX parse failed');});
+    };
+    reader.onerror=function(){cb('Read failed');};
+    reader.readAsArrayBuffer(file);
+  }else if(name.endsWith('.pdf')){
+    reader.onload=function(e){
+      var typedarray=new Uint8Array(e.target.result);
+      pdfjsLib.getDocument({data:typedarray}).promise.then(function(pdf){
+        var textPromises=[];
+        for(var i=1;i<=pdf.numPages;i++){
+          textPromises.push(pdf.getPage(i).then(function(page){return page.getTextContent().then(function(tc){return tc.items.map(function(it){return it.str;}).join(' ');});}));
+        }
+        Promise.all(textPromises).then(function(pages){cb(null,pages.join('\n'));}).catch(function(){cb('PDF extract failed');});
+      }).catch(function(){cb('PDF parse failed');});
+    };
+    reader.onerror=function(){cb('Read failed');};
+    reader.readAsArrayBuffer(file);
+  }else{cb('Unsupported format');}
+}
+
+function storeMeeting(title,transcript,mimeType){
+  if(!activeBizId)return;
+  var record={
+    biz_id:activeBizId,
+    title:title,
+    transcript:transcript,
+    platform:'imported',
+    meeting_date:new Date().toISOString().split('T')[0],
+    attendees:[],
+    decisions:[],
+    action_items:[],
+    open_questions:[],
+    flags:[],
+    raw_metadata:{mimeType:mimeType,size:transcript.length},
+    provenance:'imported',
+    sha256:'n/a'
+  };
+  // Save to localStorage cache
+  var key='kc_meetings_'+activeBizId;
+  var all=JSON.parse(localStorage.getItem(key)||'[]');
+  record.id='mtg_'+Date.now().toString(36);
+  record.created_at=new Date().toISOString();
+  all.unshift(record);
+  localStorage.setItem(key,JSON.stringify(all));
+  // Sync to Supabase
+  if(sb&&sbUser){
+    sb.from('meetings').insert({user_id:sbUser.id,business_id:activeBizId,title:title,transcript:transcript,platform:'imported',meeting_date:record.meeting_date,raw_metadata:record.raw_metadata,provenance:'imported'}).then(function(){console.log('Meeting synced');});
+  }
+  loadMeetings();
+}
+
+function loadMeetings(){
+  var list=document.getElementById('meetings-list');
+  if(!list)return;
+  if(!activeBizId){list.innerHTML='';return;}
+  var key='kc_meetings_'+activeBizId;
+  var all=JSON.parse(localStorage.getItem(key)||'[]');
+  if(!all.length){list.innerHTML='';return;}
+  list.innerHTML='';
+  all.forEach(function(m){
+    var d=document.createElement('div');d.className='meeting-item';
+    var platform=m.platform||'imported';
+    var date=m.meeting_date||m.created_at?m.created_at.split('T')[0]:'—';
+    d.innerHTML='<div class="meeting-title">'+escHtml(m.title)+'</div><div class="meeting-meta"><span class="meeting-platform">'+platform+'</span>'+date+' · '+m.transcript.length+' chars</div>';
+    d.onclick=function(){alert('Meeting detail view coming in Phase 4b')}; // placeholder
+    list.appendChild(d);
+  });
+}
+
+function generateWeeklyReview(bizId){
+  if(!bizId)return;
+  var key='kc_meetings_'+bizId;
+  var all=JSON.parse(localStorage.getItem(key)||'[]');
+  var biz=businesses.find(function(b){return b.id===bizId;});
+  if(!all.length||!biz)return null;
+  var thisWeek=all.filter(function(m){var d=new Date(m.created_at||m.meeting_date);var now=new Date();var diff=(now-d)/(1000*60*60*24);return diff<=7;});
+  var summary='**WEEKLY MEETING REVIEW — '+biz.name.toUpperCase()+'**\n\n';
+  summary+='Meetings this week: '+thisWeek.length+'\n\n';
+  if(thisWeek.length){
+    summary+='**Key Discussions:**\n';
+    thisWeek.forEach(function(m,i){summary+=(i+1)+'. '+m.title+'\n';});
+  }else{
+    summary+='No meetings recorded this week.\n';
+  }
+  summary+='\n_Action items, decisions, and risk flags will be extracted here once Claude normalization is wired._';
+  return summary;
+}
+
 </script>
 <!-- Confirmation sheet -->
 <div id="cfm-backdrop">
