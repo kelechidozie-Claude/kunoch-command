@@ -1183,7 +1183,7 @@ Tone: investor-grade, numbers over opinions, USD/NGN/GBP clarity.`;
 var DEFAULT_BUSINESSES=[
   {id:'cirquu',name:'Cirquu',legal_entity:'',jurisdictions:'Nigeria, UK',positioning:'AI-powered ERP SaaS built on Odoo, targeting African SMEs',stage:'pilot',revenue:'',currency:'USD',business_model:'SaaS subscription. GTM bundled with Insight360 consulting. Portfolio businesses serve as pilot customers for case study generation.',target_customer:'African SMEs',key_people:'Kelechi Dozie (CMO, co-founder, 25% equity)',p1:'Public launch and pilot customer acquisition',p2:'Consulting + technology bundled GTM via Insight360',p3:'Case study generation from portfolio deployments',constraints:'Protect 25% equity stake. Africa-first product decisions.',competitors:'Odoo partners, Zoho, SAP Business One, regional ERP providers',challenges:'GTM execution, pricing for African SME budgets, localisation',c1:'#4FC3F7',c2:'#0E1018',c3:'#C9A84C',font_h:'',font_b:'',tone:'Confident, technical but accessible. Speaks to African SME operators who want modern tools without enterprise complexity.',values:'Accessible · Modern · African',dos:'Lead with outcomes. Use SME-relevant examples.',donts:"Don't overuse enterprise jargon. Don't compare to SAP unprompted."},
   {id:'ifta',name:'IFTA Farms',legal_entity:'',jurisdictions:'Nigeria',positioning:'Agriculture subsidiary of Kunoch Family Office',stage:'',revenue:'',currency:'NGN',business_model:'',target_customer:'',key_people:'Four-brother board (Kunoch Family Office governance)',p1:'',p2:'',p3:'',constraints:'Board approval required for capex above threshold.',competitors:'',challenges:'',c1:'#34D399',c2:'#0E1018',c3:'#C9A84C',font_h:'',font_b:'',tone:'',values:'',dos:'',donts:''},
-  {id:'hertunba',name:'Hertunba Fashion',legal_entity:'Hertunba Fashion Limited',jurisdictions:'Nigeria',positioning:'Premium Nigerian fashion label',stage:'revenue',revenue:'',currency:'NGN',business_model:'Direct-to-consumer fashion retail. Approved Insight360 case study.',target_customer:'',key_people:'',p1:'IP enforcement against counterfeit garments',p2:'Insight360 case study development',p3:'',constraints:'',competitors:'',challenges:'Counterfeit garment sellers diluting brand and revenue',c1:'#C9A84C',c2:'#0E1018',c3:'#F472B6',font_h:'Playfair Display',font_b:'DM Sans',tone:'',values:'',dos:'',donts:''},
+  {id:'onalaja',name:'Onalaja',legal_entity:'',jurisdictions:'UK, Nigeria',positioning:'Luxury womenswear with demi-couture elements — Nigerian heritage meets Italian design aesthetics (onalaja.com)',stage:'revenue',revenue:'',currency:'GBP',business_model:'Made-to-order, hand-embellished. DTC Shopify store plus stockists; all sales final; ships worldwide, dispatched from the UK. Signature lines: Zusi (hand-embellished dresses) and Zaza (hand-beaded bags), price points ~£95–£4,900.',target_customer:'',key_people:'Kelechi Dozie',p1:'UK design studio — Class E commercial within 15 mins of NW2 2NA',p2:'',p3:'',constraints:'',competitors:'',challenges:'',c1:'#C9A84C',c2:'#0E1018',c3:'#F472B6',font_h:'Playfair Display',font_b:'DM Sans',tone:'Maximalist brand voice — the Onalaja Hive, bee motif.',values:'',dos:'',donts:''},
   {id:'insight360',name:'Insight360',legal_entity:'',jurisdictions:'Nigeria',positioning:'Strategic growth and transformation consultancy',stage:'revenue',revenue:'',currency:'USD',business_model:'Advisory and consulting. Absorbed all operations from legacy entity IONEC (retained for track record). Bundled with Cirquu for consulting + technology GTM.',target_customer:'African SMEs and mid-market',key_people:'Kelechi Dozie (founder)',p1:'Cirquu bundled GTM execution',p2:'EU / Liberia PPP pipeline engagement',p3:'',constraints:'',competitors:'',challenges:'',c1:'#A78BFA',c2:'#0E1018',c3:'#C9A84C',font_h:'',font_b:'',tone:'',values:'',dos:'',donts:''},
   {id:'disruptdna',name:'Disrupt DNA',legal_entity:'',jurisdictions:'Nigeria',positioning:'Creative agency',stage:'',revenue:'',currency:'NGN',business_model:'',target_customer:'',key_people:'',p1:'',p2:'',p3:'',constraints:'',competitors:'',challenges:'',c1:'#F472B6',c2:'#0E1018',c3:'#C9A84C',font_h:'',font_b:'',tone:'',values:'',dos:'',donts:''},
   {id:'kunochfoods',name:'Kunoch Foods',legal_entity:'',jurisdictions:'Nigeria',positioning:'FMCG subsidiary of Kunoch Family Office',stage:'',revenue:'',currency:'NGN',business_model:'',target_customer:'',key_people:'Four-brother board',p1:'',p2:'',p3:'',constraints:'Board approval required for strategic decisions.',competitors:'',challenges:'',c1:'#FB923C',c2:'#0E1018',c3:'#C9A84C',font_h:'',font_b:'',tone:'',values:'',dos:'',donts:''},
@@ -1402,6 +1402,20 @@ function loadBusinesses(){
   }else{
     businesses=DEFAULT_BUSINESSES.slice();saveBusinessesToStorage();
   }
+  // One-time migration: Hertunba → Onalaja (id + profile), preserving history/meetings
+  try{
+    var hbIdx=businesses.findIndex(function(b){return b.id==='hertunba';});
+    if(hbIdx>=0&&!businesses.some(function(b){return b.id==='onalaja';})){
+      var onj=DEFAULT_BUSINESSES.find(function(b){return b.id==='onalaja';});
+      if(onj)businesses[hbIdx]=JSON.parse(JSON.stringify(onj));
+      saveBusinessesToStorage();
+      var hist=JSON.parse(localStorage.getItem('kc_history_v3')||'{}');
+      if(hist['hertunba']){hist['onalaja']=(hist['onalaja']||[]).concat(hist['hertunba']);delete hist['hertunba'];localStorage.setItem('kc_history_v3',JSON.stringify(hist));}
+      var mkey=localStorage.getItem('kc_meetings_hertunba');
+      if(mkey){localStorage.setItem('kc_meetings_onalaja',mkey);localStorage.removeItem('kc_meetings_hertunba');}
+      if(localStorage.getItem('kc_active_biz')==='hertunba')localStorage.setItem('kc_active_biz','onalaja');
+    }
+  }catch(e){}
   activeBizId=localStorage.getItem('kc_active_biz')||businesses[0].id;
   if(!businesses.find(function(b){return b.id===activeBizId;}))activeBizId=businesses[0].id;
 }
