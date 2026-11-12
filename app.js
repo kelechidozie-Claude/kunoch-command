@@ -3,7 +3,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '4.0.1';
+  var VERSION = '4.0.2';
   var SUPABASE_URL = 'https://eplsmeenlwbglgtnzxau.supabase.co';
   var SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVwbHNtZWVubHdiZ2xndG56eGF1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQyNDM3MTYsImV4cCI6MjA5OTgxOTcxNn0.ry8pf_93UetpE_TgTig438hayZwx-GOM2QxHgwjTqGg';
   var BRIDGE = SUPABASE_URL + '/functions/v1/kc-bridge';
@@ -199,6 +199,7 @@
     '- Numbers over adjectives. State the currency (NGN, USD, GBP) on every figure. Never invent figures: if a number is missing, say exactly what you need.',
     '- Where it matters, mark a claim CERTAIN, LIKELY or GUESSING.',
     '- Weigh options on ROI timeline, asset control, jurisdictional protection, scalability and exit optionality.',
+    '- For marketing, brand, creative or social media questions, answer as a senior marketer would: audience, message, channel, budget and the metric that proves it worked, and respect the active business\'s brand spec.',
     '- Finish with the single next action when there is one. No preamble, no praise, no closing offers.',
     '- For facts about his calendar, meetings and tasks use only the live context below. If it is empty or silent on something, say so plainly instead of guessing.',
     '- Plain markdown only: bold labels, bullets, small tables. No headings larger than ###.'
@@ -206,6 +207,7 @@
   var LENSES = {
     finance: { name: 'Finance view', brief: 'You are the CFO lens: cash, unit economics, IRR and payback, FX exposure across NGN/USD/GBP, leverage and downside cases.' },
     legal: { name: 'Legal view', brief: 'You are the legal lens: contract terms, liability, regulatory exposure and structuring across Nigeria (CAMA 2020, NDPR), Liberia and the UK. You are not a substitute for counsel; flag where counsel must review.' },
+    marketing: { name: 'Marketing view', brief: 'You are the marketing lens, combining four roles: creative director (the idea, visual direction and craft), social media lead (platforms, formats, cadence, community), marketer (audience, positioning, channels, budget, funnel and measurable return) and brand guardian (consistency with the brand spec in the context: colours, fonts, tone, values, do\'s and don\'ts). Be concrete: name the audience, the message, the channel and the metric. Flag anything off-brand.' },
     deal: { name: 'Deal view', brief: 'You are the deal lens: valuation, structure, leverage in the negotiation, counterparty incentives, governance and exit.' }
   };
 
@@ -220,6 +222,8 @@
       f('Revenue band', d.revenue ? (d.revenue + ' ' + (d.currency || '')) : ''); f('Business model', d.business_model); f('Target customer', d.target_customer);
       f('Key people', d.key_people); f('Priorities', [d.p1, d.p2, d.p3].filter(Boolean).join(' | ')); f('Constraints', d.constraints);
       f('Competitors', d.competitors); f('Current challenges', d.challenges);
+      f('Brand tone of voice', d.tone); f('Brand values', d.values); f('Brand do\'s', d.dos); f('Brand don\'ts', d.donts);
+      f('Brand fonts', [d.font_h, d.font_b].filter(Boolean).join(' / '));
     } else {
       out.push('', 'PORTFOLIO (no single business selected)');
       S.businesses.forEach(function (x) { out.push('- ' + x.data.name + (x.data.positioning ? ' — ' + x.data.positioning : '') + (x.data.stage ? ' [' + x.data.stage + ']' : '')); });

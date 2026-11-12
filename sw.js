@@ -1,7 +1,7 @@
 /* Kunoch Command v4 service worker — app shell only.
    Network-first so a deploy always wins; cache is the offline fallback.
    Calls to Supabase and the adviser are never intercepted or cached. */
-var CACHE = 'kc4-4.0.1';
+var CACHE = 'kc4-4.0.2';
 var SHELL = ['./', './index.html', './app.css', './app.js', './pdf.js', './manifest.json', './icon-192.png', './icon-512.png',
   './vendor/supabase.js', './vendor/jspdf.umd.min.js', './brand/insight360-logo.png', './brand/insight360-mark.png',
   './brand/Inter-Regular.ttf', './brand/Inter-SemiBold.ttf'];
