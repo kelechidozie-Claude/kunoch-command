@@ -3,7 +3,8 @@
 (function () {
   'use strict';
 
-  var VERSION = '4.0.2';
+  var VERSION = '4.1.0';
+  var NEW_APP = 'https://command.insight360.biz/';
   var SUPABASE_URL = 'https://eplsmeenlwbglgtnzxau.supabase.co';
   var SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVwbHNtZWVubHdiZ2xndG56eGF1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQyNDM3MTYsImV4cCI6MjA5OTgxOTcxNn0.ry8pf_93UetpE_TgTig438hayZwx-GOM2QxHgwjTqGg';
   var BRIDGE = SUPABASE_URL + '/functions/v1/kc-bridge';
@@ -289,7 +290,8 @@
     var today = ms.filter(function (m) { return dayKey(m.start) === tk; });
     var later = ms.filter(function (m) { return dayKey(m.start) > tk; });
     var overdue = ts.filter(function (t) { return t.due && t.due < tk; });
-    var h = '<h1 class="day">' + esc(fmt(now, { weekday: 'long', day: 'numeric', month: 'long' })) + '</h1>' +
+    var h = '<div class="notice" style="margin:0 0 16px"><strong>This app has moved into Insight Command.</strong><br>Your diary, tasks, debriefs and Fredrick are now in one place, with one login.<br><a class="btn sm primary" href="' + NEW_APP + '" style="margin-top:8px">Open Insight Command</a></div>' +
+      '<h1 class="day">' + esc(fmt(now, { weekday: 'long', day: 'numeric', month: 'long' })) + '</h1>' +
       '<p class="sub">' + esc(S.biz === 'all' ? 'Across the portfolio' : bizName(S.biz)) + '</p>';
     if (S.feedErr) h += '<div class="notice">Calendar and tasks could not be loaded: ' + esc(S.feedErr) + '<br><button class="btn sm" data-act="refresh">Try again</button></div>';
     h += '<div class="stats">' +

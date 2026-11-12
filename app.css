@@ -196,3 +196,6 @@ details.more[open] summary::before{content:"\2212  "}
 }
 @media (max-width:420px){ .act-row .fields{grid-template-columns:1fr 1fr} .act-row .fields select{grid-column:span 2} }
 @media (prefers-reduced-motion:reduce){ *{animation:none!important;transition:none!important} }
+
+.auth-moved{background:var(--red-soft);border-radius:12px;padding:10px 12px;font-size:14px;margin:-10px 0 18px}
+.auth-moved a{color:#fff;font-weight:600}
