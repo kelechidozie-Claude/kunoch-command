@@ -13,7 +13,7 @@
 <link rel="manifest" href="./manifest.json">
 <link rel="icon" href="./icon-192.png">
 <link rel="apple-touch-icon" href="./icon-192.png">
-<link rel="stylesheet" href="./app.css?v=4.0.0">
+<link rel="stylesheet" href="./app.css?v=4.0.1">
 </head>
 <body>
 
@@ -32,6 +32,7 @@
       </div>
       <button class="btn primary block" type="submit" id="auth-go">Send sign-in link</button>
       <button class="btn link block" type="button" id="auth-toggle">Use a password instead</button>
+      <button class="btn link block" type="button" id="auth-forgot" hidden>Forgot or never set a password?</button>
       <p class="auth-msg" id="auth-msg" role="status"></p>
     </form>
   </div>
@@ -60,7 +61,7 @@
 <div id="toast" role="status" aria-live="polite"></div>
 
 <script src="./vendor/supabase.js"></script>
-<script src="./pdf.js?v=4.0.0"></script>
-<script src="./app.js?v=4.0.0"></script>
+<script src="./pdf.js?v=4.0.1"></script>
+<script src="./app.js?v=4.0.1"></script>
 </body>
 </html>

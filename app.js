@@ -3,7 +3,7 @@
 (function () {
   'use strict';
 
-  var VERSION = '4.0.0';
+  var VERSION = '4.0.1';
   var SUPABASE_URL = 'https://eplsmeenlwbglgtnzxau.supabase.co';
   var SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVwbHNtZWVubHdiZ2xndG56eGF1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQyNDM3MTYsImV4cCI6MjA5OTgxOTcxNn0.ry8pf_93UetpE_TgTig438hayZwx-GOM2QxHgwjTqGg';
   var BRIDGE = SUPABASE_URL + '/functions/v1/kc-bridge';
@@ -385,8 +385,23 @@
   function sheetMenu() {
     sheet('<h2>Kunoch Command</h2><p class="meta">' + esc(DEMO ? 'Demo mode' : (S.user && S.user.email) || '') + ' · v' + VERSION + '</p><div class="stack">' +
       '<button class="btn block" data-act="refresh">Refresh calendar and tasks</button>' +
+      (DEMO ? '' : '<button class="btn block" data-act="set-pw">Set or change password</button>') +
       '<a class="btn block" href="./legacy/" target="_blank" rel="noopener">Open the classic multi-agent app</a>' +
       '<button class="btn block ghost" data-act="signout">Sign out</button></div>');
+  }
+
+  function sheetPassword(recovery) {
+    sheet('<h2>' + (recovery ? 'Choose a new password' : 'Set a password') + '</h2><p class="meta">Use it to sign in on any device, including the app on your home screen.</p>' +
+      '<label for="pw-new">New password (8 characters or more)</label><input id="pw-new" type="password" autocomplete="new-password" minlength="8">' +
+      '<div class="stack"><button class="btn primary block" data-act="pw-save">Save password</button></div>');
+    setTimeout(function () { var n = $('pw-new'); if (n) n.focus(); }, 60);
+  }
+  async function savePassword() {
+    var pw = $('pw-new').value; if (pw.length < 8) { toast('Use at least 8 characters.'); return; }
+    working('Password', 'Saving…');
+    var r = await S.sb.auth.updateUser({ password: pw });
+    if (r.error) { sheet('<h2>Could not save</h2><div class="notice">' + esc(r.error.message) + '</div><div class="stack"><button class="btn block" data-act="set-pw">Try again</button></div>'); return; }
+    closeSheet(); toast('Password saved. Use it in the home-screen app.');
   }
 
   /* ── debrief ── */
@@ -628,6 +643,8 @@
     else if (a === 'menu') sheetMenu();
     else if (a === 'close-sheet') closeSheet();
     else if (a === 'refresh') { closeSheet(); toast('Refreshing…'); loadAll(true); }
+    else if (a === 'set-pw') sheetPassword(false);
+    else if (a === 'pw-save') savePassword();
     else if (a === 'signout') { closeSheet(); if (DEMO) location.search = ''; else S.sb.auth.signOut(); }
     else if (a === 'debrief') sheetDebrief(el.dataset.id);
     else if (a === 'skip-debrief') skipDebrief(el.dataset.id);
@@ -669,7 +686,23 @@
   var usePw = false;
   function showAuth(msg, err) { $('app').hidden = true; $('auth').hidden = false; var m = $('auth-msg'); m.textContent = msg || ''; m.className = 'auth-msg' + (err ? ' err' : ''); }
   function showApp() { $('auth').hidden = true; $('app').hidden = false; try { var b = localStorage.getItem('kc4_biz'); if (b) S.biz = b; } catch (e) {} render(); loadAll().then(function () { if (S.biz !== 'all' && !bizById(S.biz)) { S.biz = 'all'; render(); } }); }
-  $('auth-toggle').addEventListener('click', function () { usePw = !usePw; $('auth-pw-row').hidden = !usePw; $('auth-go').textContent = usePw ? 'Sign in' : 'Send sign-in link'; this.textContent = usePw ? 'Email me a sign-in link instead' : 'Use a password instead'; });
+  var STANDALONE = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+  function setPwMode(on) {
+    usePw = on; $('auth-pw-row').hidden = !on; $('auth-forgot').hidden = !on;
+    $('auth-go').textContent = on ? 'Sign in' : 'Send sign-in link';
+    $('auth-toggle').textContent = on ? 'Email me a sign-in link instead' : 'Use a password instead';
+  }
+  $('auth-toggle').addEventListener('click', function () { setPwMode(!usePw); showAuth(''); });
+  $('auth-forgot').addEventListener('click', async function () {
+    var email = $('auth-email').value.trim(); if (!email) { showAuth('Enter your email first.', true); return; }
+    showAuth('Sending…');
+    var r = await S.sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
+    if (r.error) showAuth(r.error.message, true);
+    else showAuth('Reset link sent. Open it, choose a password, then come back here and sign in with it.');
+  });
+  /* The installed app has its own storage, and an emailed link opens in the browser instead,
+     so the home-screen app signs in with a password. */
+  if (STANDALONE) setPwMode(true);
   $('auth-form').addEventListener('submit', async function (e) {
     e.preventDefault(); var email = $('auth-email').value.trim(), go = $('auth-go'); if (!email) return;
     go.disabled = true; showAuth(usePw ? 'Signing in…' : 'Sending…');
@@ -677,7 +710,7 @@
       var r = usePw ? await S.sb.auth.signInWithPassword({ email: email, password: $('auth-pw').value })
                     : await S.sb.auth.signInWithOtp({ email: email, options: { emailRedirectTo: location.origin + location.pathname, shouldCreateUser: false } });
       if (r.error) throw r.error;
-      if (!usePw) showAuth('Check your inbox for the sign-in link, and open it on this device.');
+      if (!usePw) showAuth(STANDALONE ? 'Link sent, but it will open in Safari, not this app. To sign in here, use a password.' : 'Check your inbox for the sign-in link, and open it on this device.');
     } catch (x) { showAuth(x.message || 'Could not sign in.', true); }
     go.disabled = false;
   });
@@ -732,6 +765,7 @@
     S.sb.auth.onAuthStateChange(function (ev, session) {
       var was = S.user && S.user.id; S.user = session ? session.user : null;
       if (S.user && S.user.id !== was) showApp(); else if (!S.user) { S.loaded = false; showAuth(); }
+      if (ev === 'PASSWORD_RECOVERY' && S.user) setTimeout(function () { sheetPassword(true); }, 300);
     });
     S.sb.auth.getSession().then(function (r) { if (!r.data || !r.data.session) showAuth(); });
   }
