@@ -1,0 +1,2834 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kunoch Command — V3</title>
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#08090D">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Kunoch">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+document.addEventListener('keydown',function(e){if(e.key!=='Escape')return;if(document.getElementById('modal-backdrop').classList.contains('open')){closeBizModal();return;}if(document.getElementById('api-panel').classList.contains('open')){toggleApi();return;}if(document.getElementById('biz-menu').classList.contains('open')){closeBizMenu();return;}});
+
+/* ── MODAL FOCUS TRAP ────────────────────────── */
+document.addEventListener('DOMContentLoaded',function(){
+var _mb=document.getElementById('modal-backdrop');if(!_mb)return;
+_mb.addEventListener('keydown',function(e){
+  if(e.key!=='Tab')return;
+  var m=document.getElementById('modal');
+  var focusable=m.querySelectorAll('button,input,select,textarea,[href]');
+  if(!focusable.length)return;
+  var first=focusable[0],last=focusable[focusable.length-1];
+  if(e.shiftKey&&document.activeElement===first){last.focus();e.preventDefault();}
+  else if(!e.shiftKey&&document.activeElement===last){first.focus();e.preventDefault();}
+});
+});
+
+
+/* ── ONBOARDING STATE ────────────────────────── */
+(function(){
+  var ob=document.getElementById('onboarding');
+  if(!ob)return;
+  var hasKey=!!localStorage.getItem('kc_api_key');
+  var hasHist=false;
+  try{var h=JSON.parse(localStorage.getItem('kc_history_v3')||'{}');hasHist=Object.keys(h).length>0;}catch(e){}
+  ob.style.display=(!hasKey&&!hasHist)?'block':'none';
+})();
+
+/* ── AUTO-SAVE DIRECTIVE ─────────────────────── */
+(function(){
+  var t=document.getElementById('task');
+  if(!t)return;
+  var saved=localStorage.getItem('kc_draft');
+  if(saved)t.value=saved;
+  var to;
+  t.addEventListener('input',function(){
+    clearTimeout(to);
+    to=setTimeout(function(){localStorage.setItem('kc_draft',t.value);},300);
+  });
+})();
+
+function toggleStar(id){
+  var btn=document.getElementById('star-'+id);if(!btn)return;
+  btn.classList.toggle('on');
+  // Persist in the current run's history entry if it exists
+  var h=JSON.parse(localStorage.getItem('kc_history_v3')||'{}');
+  var biz=h[activeBizId]||[];
+  if(biz.length&&biz[0].id===lastRunId){
+    if(!biz[0].stars)biz[0].stars=[];
+    var idx=biz[0].stars.indexOf(id);
+    if(idx>-1)biz[0].stars.splice(idx,1);else biz[0].stars.push(id);
+    localStorage.setItem('kc_history_v3',JSON.stringify(h));
+  }
+}
+
+function countWords(s){return(s||'').trim().split(/\s+/).filter(function(w){return w.length>0;}).length;}
+function countTokens(s){return Math.round(countWords(s)*1.3);}
+function fmtCount(s){var w=countWords(s);var t=countTokens(s);return w+' words · ~'+t+' tokens';}
+
+function toggleTaskFullscreen(){
+  var fs=document.getElementById('task-fs');var ta=document.getElementById('task');var fsta=document.getElementById('task-fs-ta');
+  if(fs.classList.contains('open')){ta.value=fsta.value;fs.classList.remove('open');ta.focus();}
+  else{fsta.value=ta.value;fs.classList.add('open');fsta.focus();}
+}
+
+/* ── OFFLINE INDICATOR ───────────────────────── */
+(function(){
+  var dot=document.getElementById('conn-status');if(!dot)return;
+  function set(){dot.classList.toggle('offline',!navigator.onLine);dot.title=navigator.onLine?'Online':'Offline';}
+  set();window.addEventListener('online',set);window.addEventListener('offline',set);
+})();
+
+function runFollowUp(){
+  var task=document.getElementById('followup-task').value.trim();
+  if(!task)return;
+  var selected=[];
+  document.querySelectorAll('.fu-chk:checked').forEach(function(c){selected.push(c.dataset.agent);});
+  if(!selected.length){showErr('Select at least one agent for follow-up');return;}
+  document.getElementById('followup-btn').disabled=true;
+  setPhase('FOLLOW-UP · '+selected.length+' agents','var(--gold)');
+  selected.forEach(function(id,i){
+    setTimeout(function(){
+      setSba(id,'working');
+      var brief='Follow-up to previous directive. Original: '+lastTask+'\n\nFollow-up question: '+task;
+      callAPI(SP[id],buildContent(brief)).then(function(o){
+        var outText=typeof o==='object'?o.text:o;
+        lastOutputs[id]=outText;
+        showAgentCard(id,'done',null,o);
+        setSba(id,'done');
+        // Append to current history
+        var h=JSON.parse(localStorage.getItem('kc_history_v3')||'{}');
+        var biz=h[activeBizId]||[];
+        if(biz.length&&biz[0].id===lastRunId){
+          if(!biz[0].followUps)biz[0].followUps=[];
+          biz[0].followUps.push({agent:id,task:task,output:outText,time:new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})});
+          localStorage.setItem('kc_history_v3',JSON.stringify(h));
+        }
+      }).catch(function(e){showAgentCard(id,'error',null,e.message);setSba(id,'error');});
+    },i*600);
+  });
+  document.getElementById('followup-btn').disabled=false;
+}
+
+function updateCostDisplay(){
+  var el=document.getElementById('cost-display');
+  if(!el)return;
+  var cost=getMonthlyCost();
+  if(cost>0){el.textContent='This month: '+fmtCost(cost);el.style.display='block';}
+  else{el.style.display='none';}
+}
+
+/* ── COST TRACKING ───────────────────────────── */
+var PRICING={'claude-sonnet-4-6':{input:3,output:15},'claude-fable-5':{input:5,output:25}};
+function getModelPrice(model){var p=PRICING[model];return p||{input:3,output:15};}
+function calcCost(usage,model){var p=getModelPrice(model);return((usage.input_tokens||0)*p.input+(usage.output_tokens||0)*p.output)/1000000;}
+function saveCost(amount){var now=new Date();var key='kc_costs_'+now.getFullYear()+'_'+(now.getMonth()+1);var costs=JSON.parse(localStorage.getItem('kc_costs')||'{}');if(!costs[key])costs[key]=0;costs[key]+=amount;localStorage.setItem('kc_costs',JSON.stringify(costs));}
+function getMonthlyCost(){var now=new Date();var key='kc_costs_'+now.getFullYear()+'_'+(now.getMonth()+1);var costs=JSON.parse(localStorage.getItem('kc_costs')||'{}');return costs[key]||0;}
+function fmtCost(n){return'$'+n.toFixed(4);}
+</script>
+<style>
+:root{
+  --gold:#C9A84C;--gold-dim:#C9A84C44;--gold-glow:#C9A84C33;
+  --bg:#08090D;--surface:#0E1018;--surface2:#141620;--surface3:#1A1D2B;
+  --border:#1E2235;--border2:#252840;
+  --text:#EDF0F7;--text-dim:#B4BCCB;--text-muted:#8A94A6;
+  --r:3px;
+  --cfo:#34D399;--legal:#F87171;--ma:#A78BFA;--ppp:#FB923C;--board:#D4AF37;--tech:#4FC3F7;--research:#F472B6;
+}
+/* ── LIGHT MODE (optional; dark is the default identity) ── */
+:root.theme-light{
+  --bg:#F4F1EA;--surface:#FFFFFF;--surface2:#FAF8F2;--surface3:#F0ECE1;
+  --border:#E6E1D4;--border2:#D6CFBD;
+  --text:#1A1D24;--text-dim:#4E5560;--text-muted:#7C7768;
+  --gold:#9A7830;--gold-dim:#9A783055;--gold-glow:#9A78300D;--gold-text:#8A6A28;
+  --cfo:#0E9E6E;--legal:#DC2626;--ma:#7C3AED;--ppp:#D96C10;--board:#A67C1A;--tech:#0E86C7;--research:#DB2777;
+}
+:root.theme-light body::before{opacity:.012}
+#theme-btn{background:transparent;border:1px solid var(--border);border-radius:2px;color:var(--text-dim);font-family:'DM Mono',monospace;font-size:8px;letter-spacing:1.5px;line-height:1;padding:6px 10px;cursor:pointer;transition:all .2s;white-space:nowrap}
+#theme-btn:hover{border-color:var(--gold-dim);color:var(--gold)}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");pointer-events:none;z-index:0}
+#app{display:flex;min-height:100vh;position:relative;z-index:1}
+
+/* ── SIDEBAR ─────────────────────────────────── */
+#sidebar{width:278px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto}
+#sb-top{padding:24px 22px 16px;border-bottom:1px solid var(--border)}
+#sb-logo{font-family:'Playfair Display',serif;font-size:17px;color:var(--gold)}
+#sb-tagline{font-family:'DM Mono',monospace;font-size:9px;color:var(--text-muted);letter-spacing:2px;margin-top:5px}
+#sb-ver{font-family:'DM Mono',monospace;font-size:9px;color:var(--border2);letter-spacing:2px;margin-top:2px}
+
+#sb-status{margin:14px 22px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r)}
+#sb-status-lbl{font-family:'DM Mono',monospace;font-size:9px;color:var(--text-muted);letter-spacing:2px;margin-bottom:4px}
+#sb-phase{font-family:'DM Mono',monospace;font-size:10px;color:var(--text-muted);letter-spacing:2px;transition:color .4s}
+
+/* MODE TOGGLE */
+#sb-mode-box{margin:0 22px 14px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--r)}
+#sb-mode-lbl{font-family:'DM Mono',monospace;font-size:9px;color:var(--text-muted);letter-spacing:2px;margin-bottom:8px}
+#sb-mode-row{display:flex;gap:6px}
+.mode-btn{flex:1;background:transparent;border:1px solid var(--border);border-radius:2px;padding:6px;font-family:'DM Mono',monospace;font-size:10px;letter-spacing:1px;color:var(--text-muted);cursor:pointer;transition:all .2s;text-align:center}
+.mode-btn.active{background:var(--gold-glow);border-color:var(--gold-dim);color:var(--gold)}
+
+#sb-agents-lbl{font-family:'DM Mono',monospace;font-size:9px;color:var(--text-muted);letter-spacing:2px;padding:0 22px;margin-bottom:8px}
+#sb-agents{flex:1;padding:0 14px}
+
+.sba{display:flex;align-items:center;gap:9px;padding:8px 8px;border-radius:var(--r);margin-bottom:1px;transition:background .2s}
+.sba:hover{background:var(--surface2)}
+.sba-dot{width:9px;height:9px;border-radius:50%;background:var(--border2);transition:all .4s;flex-shrink:0}
+.sba-info{flex:1;min-width:0}
+.sba-name{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:1px;color:var(--text-muted);transition:color .4s}
+.sba-role{font-size:11px;color:var(--text-dim);opacity:.6;margin-top:1px}
+.sba-st{font-family:'DM Mono',monospace;font-size:9px;color:var(--text-muted);transition:all .4s}
+
+/* MANUAL SELECT CHECKBOXES */
+.sba-chk{width:14px;height:14px;border-radius:2px;border:1px solid var(--border);background:var(--bg);appearance:none;-webkit-appearance:none;cursor:pointer;flex-shrink:0;transition:all .2s;position:relative}
+.sba-chk:checked{background:var(--gold);border-color:var(--gold)}
+.sba-chk:checked::after{content:'✓';position:absolute;top:-1px;left:1px;font-size:9px;color:#000;font-weight:bold}
+.sba-chk:disabled{opacity:.3;cursor:not-allowed}
+#manual-note{font-family:'DM Mono',monospace;font-size:9px;color:var(--text-muted);padding:6px 14px 0;line-height:1.5}
+
+/* HISTORY */
+#sb-hist-lbl{font-family:'DM Mono',monospace;font-size:9px;color:var(--text-muted);letter-spacing:2px;padding:0 22px;margin-bottom:6px;margin-top:4px}
+#sb-history{padding:0 14px}
+.hist-item{padding:7px 10px;border-radius:var(--r);background:var(--surface2);border:1px solid var(--border);margin-bottom:5px;cursor:pointer;transition:all .2s;position:relative}.hist-compare{position:absolute;right:8px;top:50%;transform:translateY(-50%);width:14px;height:14px;border-radius:2px;border:1px solid var(--border);background:var(--bg);appearance:none;-webkit-appearance:none;cursor:pointer}.hist-compare:checked{background:var(--gold);border-color:var(--gold)}
+.hist-item:hover{border-color:var(--gold-dim)}
+.hist-task{font-size:10px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hist-meta{font-family:'DM Mono',monospace;font-size:9px;color:var(--text-muted);margin-top:2px;letter-spacing:1px}
+.hist-empty{font-family:'DM Mono',monospace;font-size:10px;color:var(--border2);padding:6px 10px}
+
+#sb-footer{padding:14px 22px;border-top:1px solid var(--border);margin-top:auto}
+#api-row{display:flex;align-items:center;gap:8px;cursor:pointer;padding:7px 8px;border-radius:var(--r);transition:background .2s}
+#api-row:hover{background:var(--surface2)}
+#api-dot{width:6px;height:6px;border-radius:50%;background:var(--legal);flex-shrink:0;transition:background .3s}
+#api-dot.ok{background:var(--cfo)}
+#api-lbl{font-family:'DM Mono',monospace;font-size:10px;color:var(--text-muted);flex:1}
+#api-panel{background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:12px;margin-top:8px;display:none}
+#api-panel.open{display:block}
+#apikey{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:2px;color:var(--text);padding:8px 10px;font-size:10px;font-family:'DM Mono',monospace;outline:none;margin-bottom:7px}
+#apikey::placeholder{color:var(--text-muted)}
+#apikey:focus{border-color:var(--gold-dim)}
+#savebtn{width:100%;background:var(--gold);color:#000;border:none;border-radius:2px;padding:8px;font-size:10px;letter-spacing:3px;font-family:'DM Mono',monospace;font-weight:500;cursor:pointer}
+#api-ok{font-family:'DM Mono',monospace;font-size:10px;color:var(--cfo);letter-spacing:2px;margin-top:6px;display:none}
+
+/* ── MAIN ─────────────────────────────────────── */
+#content{flex:1;display:flex;flex-direction:column;min-width:0}
+#topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 36px;height:50px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+#tb-l{font-family:'DM Mono',monospace;font-size:10px;color:var(--text-muted);letter-spacing:2px}
+#tb-r{font-family:'DM Mono',monospace;font-size:10px;color:var(--text-muted);letter-spacing:2px}
+#work{padding:30px 36px;flex:1}
+.sec-lbl{font-family:'DM Mono',monospace;font-size:9px;color:var(--text-muted);letter-spacing:4px;text-transform:uppercase;margin-bottom:10px}
+
+/* UPLOAD */
+#upload-sec{margin-bottom:22px}
+#dropzone{border:1px dashed var(--border2);border-radius:var(--r);padding:20px;text-align:center;cursor:pointer;transition:all .3s;position:relative;background:var(--surface)}
+#dropzone:hover,#dropzone.drag{border-color:var(--tech);background:#0a111a}
+#dropzone input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+#dz-icon{font-size:20px;color:var(--border2);margin-bottom:5px;transition:color .3s}
+#dropzone:hover #dz-icon,#dropzone.drag #dz-icon{color:var(--tech)}
+#dz-title{font-family:'DM Mono',monospace;font-size:9px;color:var(--text-dim);letter-spacing:2px;margin-bottom:3px}
+#dz-sub{font-size:10px;color:var(--text-muted)}
+#file-pills{display:none;flex-wrap:wrap;gap:7px;margin-top:12px}
+.fpill{display:flex;align-items:center;gap:5px;background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:4px 10px;font-size:9px;font-family:'DM Mono',monospace;transition:border-color .3s}
+.fpill.ready{border-color:var(--cfo)33}
+.fpill-badge{font-size:9px;font-weight:500;padding:1px 5px;border-radius:3px}
+.fpill-name{color:var(--text-dim);max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fpill-rm{background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:12px;line-height:1;margin-left:2px}
+.fpill-rm:hover{color:var(--legal)}
+#proc-note{font-family:'DM Mono',monospace;font-size:10px;color:#D9BC6B;letter-spacing:2px;margin-top:8px;display:none}#proc-note .spin{display:inline-block;width:10px;height:10px;border:2px solid var(--gold-dim);border-top-color:var(--gold);border-radius:50%;animation:spin 1s linear infinite}
+
+/* DIRECTIVE */
+#dir-sec{margin-bottom:20px}
+#task{width:100%;background:var(--surface);border:1px solid var(--border);border-left:2px solid var(--gold);border-radius:var(--r);color:var(--text);padding:16px 18px;font-size:13px;font-family:'DM Sans',sans-serif;resize:vertical;outline:none;line-height:1.8;min-height:110px;display:block;transition:border-color .3s}
+#task::placeholder{color:var(--text-muted)}
+#task:focus{border-left-color:var(--gold)}
+#task-hint{font-family:'DM Mono',monospace;font-size:9px;color:var(--text-muted);letter-spacing:2px;margin-top:5px;text-align:right}
+
+/* BUTTONS */
+#btnrow{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+#runbtn{background:var(--gold);color:#000;border:none;border-radius:var(--r);padding:12px 32px;font-size:10px;letter-spacing:3px;font-family:'DM Mono',monospace;font-weight:500;cursor:pointer;transition:all .2s}
+#runbtn:hover:not(:disabled){background:#D4B060;transform:translateY(-1px);box-shadow:0 4px 16px var(--gold-dim)}
+#runbtn:disabled{background:var(--surface2);color:var(--text-muted);border:1px solid var(--border);cursor:not-allowed;transform:none;box-shadow:none}
+.sbtn{background:transparent;color:var(--text-muted);border:1px solid var(--border);border-radius:var(--r);padding:12px 16px;font-size:9px;letter-spacing:2px;font-family:'DM Mono',monospace;cursor:pointer;transition:all .2s;display:none}
+.sbtn:hover{border-color:var(--border2);color:var(--text-dim)}
+#pdfbtn{color:var(--cfo);border-color:var(--cfo)33}
+#pdfbtn:hover{border-color:var(--cfo)88;background:var(--cfo)0d}
+#errbox{background:#140A0A;border:1px solid var(--legal)44;border-left:2px solid var(--legal);border-radius:var(--r);padding:11px 14px;margin-top:14px;font-size:10px;color:#FCA5A5;font-family:'DM Mono',monospace;display:none;line-height:1.6}
+
+/* RESULTS */
+#results{margin-top:28px;display:none}
+
+/* FREDRICK CARD */
+#fcard{background:var(--surface);border:1px solid var(--gold-dim);border-radius:var(--r);padding:18px 20px;margin-bottom:16px;display:none;position:relative;overflow:hidden}
+#fcard::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--gold),transparent)}
+#f-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px}
+#f-name{font-family:'Playfair Display',serif;font-size:15px;color:var(--gold)}
+#f-role{font-family:'DM Mono',monospace;font-size:9px;color:var(--text-muted);letter-spacing:2px;margin-top:3px}
+#f-badge{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:2px;padding:3px 9px;border-radius:20px;border:1px solid var(--gold-dim);color:#D9BC6B}
+#f-sum{font-size:11px;color:var(--text-dim);line-height:1.6;font-style:italic;margin-bottom:10px}
+#f-tags{display:flex;flex-wrap:wrap;gap:5px}
+.f-tag{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:2px;padding:2px 9px;border-radius:20px}
+
+/* AGENT OUTPUT CARDS */
+#agents-lbl{display:none}
+#out-grid{display:grid;grid-template-columns:1fr;gap:14px;margin-bottom:14px}
+.acard{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);display:none;overflow:hidden}
+.acard.show{display:block}
+.acard-bar{height:2px}
+.acard-inner{padding:20px 24px 18px}
+.acard-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px}
+.acard-name{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:2px;font-weight:500}
+.acard-role{font-size:10px;color:var(--text-muted);margin-top:3px}
+.acard-badge{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;padding:2px 7px;border-radius:20px}
+.acard-brief{font-family:'DM Mono',monospace;font-size:9px;color:var(--text-muted);line-height:1.6;margin-bottom:14px;padding:9px 12px;background:var(--surface2);border-radius:2px;border-left:2px solid var(--border2);cursor:pointer;transition:border-color .2s}
+.acard-brief:hover{border-left-color:var(--gold-dim)}
+.acard-brief-lbl{font-size:9px;letter-spacing:2px;margin-bottom:3px}
+.acard-brief-text{font-size:9px;color:var(--text-muted);overflow:hidden;transition:max-height .3s;max-height:32px;font-family:'DM Mono',monospace}
+.acard-brief-text.expanded{max-height:400px}
+.acard-body{font-size:14px;color:var(--text);line-height:1.75;font-family:'DM Sans',sans-serif}
+.acard-body strong,.acard-body b{color:var(--gold);font-weight:600}
+.acard-body h4{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:2px;color:var(--gold);text-transform:uppercase;margin:18px 0 8px;font-weight:500}
+.acard-body h4:first-child{margin-top:0}
+.acard-body ul{margin:8px 0 8px 4px;list-style:none}
+.acard-body li{position:relative;padding-left:16px;margin-bottom:6px}
+.acard-body li::before{content:'›';position:absolute;left:2px;color:var(--gold-dim)}
+.acard-body p{margin-bottom:10px}
+.acard-body p:last-child{margin-bottom:0}
+.acard-footer{display:flex;align-items:center;justify-content:flex-end;margin-top:14px;padding-top:10px;border-top:1px solid var(--border);gap:6px}
+.copy-btn{background:none;border:1px solid var(--border);border-radius:2px;color:var(--text-muted);font-family:'DM Mono',monospace;font-size:9px;letter-spacing:2px;padding:3px 8px;cursor:pointer;transition:all .2s}
+.copy-btn:hover{border-color:var(--gold-dim);color:var(--gold)}
+.copy-btn.copied{color:var(--cfo);border-color:var(--cfo)44}
+.retry-btn{background:none;border:1px solid var(--border);border-radius:2px;color:var(--text-muted);font-family:'DM Mono',monospace;font-size:9px;letter-spacing:2px;padding:3px 8px;cursor:pointer;transition:all .2s;display:none}
+.retry-btn:hover{border-color:var(--ppp)88;color:var(--ppp)}
+.retry-btn.show{display:inline-block}
+
+/* SYNTHESIS */
+#syn-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:32px 34px;display:none;position:relative;overflow:hidden}
+#syn-card::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,var(--gold-glow) 0%,transparent 50%);pointer-events:none}
+#syn-card::after{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--gold),transparent)}
+#syn-hdr{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:22px;position:relative}
+#syn-title{font-family:'Playfair Display',serif;font-size:21px;color:var(--text)}
+#syn-lbl{font-family:'DM Mono',monospace;font-size:9px;color:#D9BC6B;letter-spacing:3px;padding:3px 10px;border:1px solid var(--gold-dim);border-radius:20px}
+#syn-body{font-size:15px;color:var(--text);line-height:1.8;font-family:'DM Sans',sans-serif;position:relative}
+#syn-body strong,#syn-body b{color:var(--gold);font-weight:600}
+#syn-body h4{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:2px;color:var(--gold);text-transform:uppercase;margin:22px 0 10px;font-weight:500}
+#syn-body h4:first-child{margin-top:0}
+#syn-body ul{margin:10px 0 10px 4px;list-style:none}
+#syn-body li{position:relative;padding-left:18px;margin-bottom:8px}
+#syn-body li::before{content:'›';position:absolute;left:2px;color:var(--gold-dim)}
+#syn-body ol{margin:10px 0 10px 20px}
+#syn-body ol li{padding-left:4px;margin-bottom:8px}
+#syn-body ol li::before{content:none}
+#syn-body p{margin-bottom:12px}
+
+#syn-footer{display:flex;justify-content:flex-end;margin-top:14px;padding-top:10px;border-top:1px solid var(--border)}
+
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.25}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+.pulse{animation:pulse 1.2s ease-in-out infinite}
+.fade-in{animation:fadeIn .35s ease forwards}
+.spin{display:inline-block;animation:spin 1s linear infinite}
+.proc-ring{display:inline-block;width:11px;height:11px;border:2px solid var(--gold-dim);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite;margin-right:8px;vertical-align:middle}
+
+/* Confirmation sheet */
+#cfm-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:300;display:none;align-items:center;justify-content:center;padding:20px}
+#cfm-backdrop.open{display:flex}
+#cfm-box{background:var(--surface);border:1px solid var(--border2);border-radius:var(--r);width:100%;max-width:420px;padding:24px 28px;box-shadow:0 8px 40px rgba(0,0,0,0.6)}
+#cfm-title{font-family:'Playfair Display',serif;font-size:16px;color:var(--gold);margin-bottom:6px}
+#cfm-msg{font-size:12px;color:var(--text-dim);line-height:1.6;margin-bottom:20px}
+#cfm-row{display:flex;gap:10px;justify-content:flex-end}
+#cfm-row .mbtn{padding:8px 18px}
+::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--gold-dim);border-radius:2px}
+
+/* ── BUSINESS SWITCHER (topbar) ───────────────── */
+#biz-switcher{position:relative;display:flex;align-items:center;gap:12px}
+#biz-lbl{font-family:'DM Mono',monospace;font-size:9px;color:var(--text-muted);letter-spacing:2px}
+#biz-btn{background:var(--surface2);border:1px solid var(--border);border-left:2px solid var(--gold);border-radius:var(--r);padding:7px 14px;font-family:'DM Mono',monospace;font-size:10px;letter-spacing:2px;color:var(--gold);cursor:pointer;display:flex;align-items:center;gap:10px;transition:all .2s;min-width:220px;justify-content:space-between}
+#biz-btn:hover{background:var(--surface3);border-color:var(--gold-dim)}
+#biz-btn-arrow{font-size:9px;color:var(--text-muted);transition:transform .2s}
+#biz-btn.open #biz-btn-arrow{transform:rotate(180deg)}
+#biz-menu{position:absolute;top:calc(100% + 6px);left:0;background:var(--surface);border:1px solid var(--border2);border-radius:var(--r);min-width:300px;box-shadow:0 8px 32px rgba(0,0,0,0.7);z-index:100;display:none;overflow:hidden}
+#biz-menu.open{display:block}
+#biz-menu-list{max-height:340px;overflow-y:auto}
+.biz-item{padding:10px 14px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--text-dim);cursor:pointer;transition:all .15s;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.biz-item:hover{background:var(--surface2);color:var(--gold)}
+.biz-item.active{background:var(--gold-glow);color:var(--gold);border-left:2px solid var(--gold)}
+.biz-item-stage{font-size:9px;color:var(--text-muted);letter-spacing:1px;padding:2px 6px;background:var(--surface3);border-radius:2px}
+.biz-item.active .biz-item-stage{color:var(--gold);background:var(--gold-glow)}
+.biz-action{padding:10px 14px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--text-dim);cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:8px;border-top:1px solid var(--border)}
+.biz-action:hover{background:var(--surface2);color:var(--gold)}
+
+/* ── PROFILE MODAL ────────────────────────────── */
+#modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:200;display:none;align-items:flex-start;justify-content:center;overflow-y:auto;padding:40px 20px}
+#modal-backdrop.open{display:flex}
+#modal{background:var(--surface);border:1px solid var(--border2);border-radius:var(--r);width:100%;max-width:820px;margin:auto;position:relative}
+#modal-hdr{padding:22px 28px 18px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-between}
+#modal-title{font-family:'Playfair Display',serif;font-size:18px;color:var(--gold)}
+#modal-sub{font-family:'DM Mono',monospace;font-size:9px;color:var(--text-muted);letter-spacing:2px;margin-top:4px}
+#modal-close{background:none;border:none;color:var(--text-muted);font-size:22px;cursor:pointer;padding:0 6px;line-height:1}
+#modal-close:hover{color:var(--legal)}
+#modal-tabs{display:flex;border-bottom:1px solid var(--border);padding:0 28px}
+.mtab{background:transparent;border:none;padding:12px 18px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:3px;color:var(--text-muted);cursor:pointer;transition:all .2s;border-bottom:2px solid transparent}
+.mtab.active{color:var(--gold);border-bottom-color:var(--gold)}
+.mtab:hover:not(.active){color:var(--text-dim)}
+#modal-body{padding:22px 28px;max-height:60vh;overflow-y:auto}
+.mpane{display:none}
+.mpane.active{display:block}
+.mgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.mgrid-full{grid-column:1/-1}
+.mfield{display:flex;flex-direction:column;gap:5px;margin-bottom:10px}
+.mlbl{font-family:'DM Mono',monospace;font-size:9px;color:var(--text-muted);letter-spacing:2px;text-transform:uppercase}
+.minp,.msel,.mtxt{background:var(--bg);border:1px solid var(--border);border-radius:2px;color:var(--text);padding:8px 10px;font-size:11px;font-family:'DM Sans',sans-serif;outline:none;transition:border-color .2s;width:100%}
+.minp:focus,.msel:focus,.mtxt:focus{border-color:var(--gold-dim)}
+.mtxt{resize:vertical;min-height:56px;line-height:1.6}
+.msel{cursor:pointer}
+.mrev{display:flex;gap:6px}
+.mrev .minp{flex:1}
+.mrev .msel{width:88px}
+.mhex{display:flex;align-items:center;gap:8px}
+.mhex input[type="color"]{width:34px;height:30px;border:1px solid var(--border);border-radius:2px;cursor:pointer;background:var(--bg);padding:2px;flex-shrink:0}
+.mhex input[type="text"]{flex:1;font-family:'DM Mono',monospace;font-size:10px}
+.mhelp{font-family:'DM Mono',monospace;font-size:9px;color:var(--text-muted);letter-spacing:1px;margin-top:2px;line-height:1.4}
+#modal-footer{padding:16px 28px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px}
+#modal-footer-right{display:flex;gap:10px}
+.mbtn{border:none;border-radius:var(--r);padding:10px 22px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:3px;cursor:pointer;transition:all .2s}
+.mbtn-save{background:var(--gold);color:#000;font-weight:500}
+.mbtn-save:hover{background:#D4B060}
+.mbtn-cancel{background:transparent;color:var(--text-muted);border:1px solid var(--border)}
+.mbtn-cancel:hover{border-color:var(--border2);color:var(--text-dim)}
+.mbtn-delete{background:transparent;color:var(--legal);border:1px solid var(--legal)33}
+.mbtn-delete:hover{background:#140A0A;border-color:var(--legal)88}
+.mbtn-delete:disabled{opacity:.3;cursor:not-allowed}
+.mbtn-delete:disabled:hover{background:transparent;border-color:var(--legal)33}
+
+/* Business context indicator under directive */
+#biz-ctx-note{font-family:'DM Mono',monospace;font-size:9px;color:#D9BC6B;letter-spacing:2px;margin-top:6px;opacity:.65;display:flex;align-items:center;gap:6px}
+#biz-ctx-note::before{content:'◆';font-size:10px}
+
+/* Backup buttons */
+#backup-row{display:flex;gap:6px;padding:8px 0 0}
+.bk-btn{flex:1;background:transparent;border:1px solid var(--border);border-radius:2px;color:var(--text-muted);font-family:'DM Mono',monospace;font-size:9px;letter-spacing:2px;padding:6px 4px;cursor:pointer;transition:all .2s}
+.bk-btn:hover{border-color:var(--gold-dim);color:var(--gold)}
+/* ── DIRECTIVE SCOPE / CROSS-BUSINESS ─────────── */
+#scope-sec{margin-bottom:20px}
+#scope-toggle{display:flex;gap:8px;margin-bottom:10px}
+.scope-btn{background:transparent;border:1px solid var(--border);border-radius:2px;color:var(--text-muted);font-family:'DM Mono',monospace;font-size:9px;letter-spacing:2px;padding:8px 16px;cursor:pointer;transition:all .2s}
+.scope-btn:hover{border-color:var(--gold-dim);color:var(--gold)}
+.scope-btn.active{background:var(--gold-glow);border-color:var(--gold-dim);color:var(--gold)}
+#cross-pick{display:none;background:var(--surface);border:1px solid var(--border);border-left:2px solid var(--gold);border-radius:var(--r);padding:14px 16px}
+.cross-hint{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;color:var(--text-dim);margin-bottom:10px;line-height:1.6}
+#cross-chips{display:flex;flex-wrap:wrap;gap:7px}
+.cross-chip{font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;padding:6px 12px;border:1px solid var(--border2);border-radius:20px;color:var(--text-dim);cursor:pointer;transition:all .2s;user-select:none}
+.cross-chip:hover{border-color:var(--gold-dim);color:var(--gold)}
+.cross-chip.on{background:var(--gold-glow);border-color:var(--gold);color:var(--gold)}
+#cross-banner{display:none;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1.5px;color:var(--gold-text);background:var(--surface);border:1px solid var(--gold-dim);border-radius:var(--r);padding:9px 14px;margin-bottom:14px}
+.hist-cross{color:var(--gold-text)}
+/* ── GUIDE OVERLAY ───────────────────────────── */
+#guide-btn{background:transparent;border:1px solid var(--border);border-radius:2px;color:var(--text-dim);font-family:'DM Mono',monospace;font-size:9px;letter-spacing:2px;padding:6px 10px;cursor:pointer;transition:all .2s}
+#guide-btn:hover{border-color:var(--gold-dim);color:var(--gold)}
+#guide-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:70;overflow-y:auto}
+#guide-backdrop.open{display:block}
+#guide-wrap{max-width:860px;margin:40px auto;background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:28px 32px;position:relative}
+#guide-close{position:absolute;top:14px;right:16px;background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:18px}
+#guide-view{max-width:820px}
+#guide-dl{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:22px}
+.guide-dl-btn{text-decoration:none;background:var(--gold-glow);border:1px solid var(--gold-dim);border-radius:var(--r);color:var(--gold);font-family:'DM Mono',monospace;font-size:10px;letter-spacing:1.5px;padding:11px 18px;transition:all .2s}
+.guide-dl-btn:hover{background:var(--gold-dim);border-color:var(--gold)}
+.gsec{background:var(--surface);border:1px solid var(--border);border-left:2px solid var(--gold);border-radius:var(--r);padding:18px 22px;margin-bottom:14px}
+.gsec h3{font-family:'Playfair Display',serif;font-size:16px;color:var(--gold-text);margin-bottom:10px;font-weight:600}
+.gsec p{font-size:13.5px;color:var(--text-dim);line-height:1.75;margin-bottom:8px}
+.gsec p:last-child{margin-bottom:0}
+.gsec b{color:var(--text);font-weight:600}
+.gsec i{color:var(--text-dim);font-style:italic}
+.gsec .gold{color:var(--gold-text)}
+.gsec ol,.gsec ul{margin:8px 0 4px 2px;padding-left:0;list-style:none;counter-reset:g}
+.gsec ol li{position:relative;padding-left:26px;margin-bottom:8px;font-size:13.5px;color:var(--text-dim);line-height:1.7;counter-increment:g}
+.gsec ol li::before{content:counter(g);position:absolute;left:0;top:0;width:17px;height:17px;border:1px solid var(--gold-dim);border-radius:50%;color:var(--gold-text);font-family:'DM Mono',monospace;font-size:9px;display:flex;align-items:center;justify-content:center}
+.gsec ul li{position:relative;padding-left:16px;margin-bottom:8px;font-size:13.5px;color:var(--text-dim);line-height:1.7}
+.gsec ul li::before{content:'›';position:absolute;left:2px;color:var(--gold-dim)}
+.gsec .mono{font-family:'DM Mono',monospace;font-size:11.5px;color:var(--gold-text);background:var(--bg);padding:1px 6px;border-radius:2px;border:1px solid var(--border2)}
+/* ── MEETINGS ────────────────────────────────── */
+#meetings-btn{background:transparent;border:1px solid var(--border);border-radius:2px;color:var(--text-dim);font-family:'DM Mono',monospace;font-size:9px;letter-spacing:2px;padding:6px 10px;cursor:pointer;transition:all .2s;margin-right:auto}
+#meetings-btn:hover{border-color:var(--gold-dim);color:var(--gold)}
+#meetings-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:60;justify-content:flex-end}
+#meetings-backdrop.open{display:flex}
+#meetings-panel{width:420px;max-width:90vw;height:100vh;background:var(--surface);border-left:1px solid var(--border);display:flex;flex-direction:column;transform:translateX(100%);transition:transform .25s ease}
+#meetings-backdrop.open #meetings-panel{transform:translateX(0)}
+#meetings-hdr{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border)}
+#meetings-title{font-family:'Playfair Display',serif;font-size:14px;color:var(--gold);letter-spacing:1px}
+#meetings-body{flex:1;overflow-y:auto;padding:14px 18px}
+#meetings-upload{padding:14px;background:var(--bg);border:1px dashed var(--border);border-radius:4px;margin-bottom:14px}
+.meeting-item{padding:10px 12px;border:1px solid var(--border);border-radius:4px;margin-bottom:8px;cursor:pointer;transition:all .2s}
+.meeting-item:hover{border-color:var(--gold-dim)}
+.meeting-title{font-size:12px;color:var(--text);font-weight:500;margin-bottom:4px}
+.meeting-meta{font-size:9px;color:var(--text-muted);letter-spacing:1px}
+.meeting-platform{display:inline-block;padding:2px 6px;border-radius:2px;background:var(--border);font-size:8px;color:var(--text-dim);margin-right:6px;text-transform:uppercase}
+.rev-item{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);border-radius:var(--r);background:var(--surface2);margin-bottom:6px;cursor:pointer;transition:all .2s}
+.rev-item:hover{border-color:var(--gold-dim)}
+.rev-when{font-family:'DM Mono',monospace;font-size:9px;color:var(--gold-text);letter-spacing:1px;white-space:nowrap}
+.rev-sum{flex:1;font-size:10px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rev-open{font-family:'DM Mono',monospace;font-size:9px;color:var(--gold);letter-spacing:1px}
+.mrv-hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.mrv-ttl{font-family:'Playfair Display',serif;font-size:14px;color:var(--gold-text)}
+.mrv-lbl{font-family:'DM Mono',monospace;font-size:8px;letter-spacing:2px;color:var(--text-muted)}
+.mrv-body{font-size:11px;color:var(--text);line-height:1.6;max-height:340px;overflow-y:auto;background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:12px}
+.mrv-foot{display:flex;gap:8px;margin-top:8px}
+.mtg-audio-badge{font-family:'DM Mono',monospace;font-size:8px;color:var(--tech);letter-spacing:1px;margin-left:6px}
+#meetings-list:empty::before{content:'NO MEETINGS YET';display:block;text-align:center;font-size:10px;color:var(--text-muted);letter-spacing:2px;padding:20px 0}
+
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- ── SIDEBAR ──────────────────────────────── -->
+<div id="sidebar">
+  <div id="sb-top">
+    <div id="sb-logo">Kunoch Command</div>
+    <div id="sb-tagline">FAMILY OFFICE INTELLIGENCE</div>
+    <div id="sb-ver">VERSION 3.0</div>
+  </div>
+
+  <div id="sb-status">
+    <div id="sb-status-lbl">SYSTEM STATUS</div>
+    <div id="sb-phase">AWAITING ORDERS</div>
+  </div>
+
+  <div id="sb-mode-box">
+    <div id="sb-mode-lbl">AGENT SELECTION MODE</div>
+    <div id="sb-mode-row">
+      <button class="mode-btn active" id="mode-auto" onclick="setMode('auto')">AUTO (FREDRICK)</button>
+      <button class="mode-btn" id="mode-manual" onclick="setMode('manual')">MANUAL</button>
+    </div>
+    <div id="manual-note" style="display:none">Check agents to run regardless of Fredrick's selection</div>
+  </div>
+
+  <div id="sb-agents-lbl">AGENT ROSTER</div>
+  <div id="sb-agents">
+    <div class="sba"><div class="sba-dot" id="sd-fredrick"></div><div class="sba-info"><div class="sba-name" id="sn-fredrick">FREDRICK</div><div class="sba-role">Chief of Staff</div></div><div class="sba-st" id="ss-fredrick">—</div></div>
+    <div class="sba"><input class="sba-chk" type="checkbox" id="chk-cfo" disabled /><div class="sba-dot" id="sd-cfo" style="background:var(--cfo)22"></div><div class="sba-info"><div class="sba-name" id="sn-cfo" style="color:var(--cfo)">CFO</div><div class="sba-role">Financial Modelling</div></div><div class="sba-st" id="ss-cfo">—</div></div>
+    <div class="sba"><input class="sba-chk" type="checkbox" id="chk-legal" disabled /><div class="sba-dot" id="sd-legal" style="background:var(--legal)22"></div><div class="sba-info"><div class="sba-name" id="sn-legal" style="color:var(--legal)">LEGAL ADVISOR</div><div class="sba-role">Law & Compliance</div></div><div class="sba-st" id="ss-legal">—</div></div>
+    <div class="sba"><input class="sba-chk" type="checkbox" id="chk-ma" disabled /><div class="sba-dot" id="sd-ma" style="background:var(--ma)22"></div><div class="sba-info"><div class="sba-name" id="sn-ma" style="color:var(--ma)">M&A STRATEGIST</div><div class="sba-role">Deals & Acquisitions</div></div><div class="sba-st" id="ss-ma">—</div></div>
+    <div class="sba"><input class="sba-chk" type="checkbox" id="chk-ppp" disabled /><div class="sba-dot" id="sd-ppp" style="background:var(--ppp)22"></div><div class="sba-info"><div class="sba-name" id="sn-ppp" style="color:var(--ppp)">PPP CONSULTANT</div><div class="sba-role">Gov't Partnerships</div></div><div class="sba-st" id="ss-ppp">—</div></div>
+    <div class="sba"><input class="sba-chk" type="checkbox" id="chk-board" disabled /><div class="sba-dot" id="sd-board" style="background:var(--board)22"></div><div class="sba-info"><div class="sba-name" id="sn-board" style="color:var(--board)">BOARD ADVISOR</div><div class="sba-role">Governance & Strategy</div></div><div class="sba-st" id="ss-board">—</div></div>
+    <div class="sba"><input class="sba-chk" type="checkbox" id="chk-tech" disabled /><div class="sba-dot" id="sd-tech" style="background:var(--tech)22"></div><div class="sba-info"><div class="sba-name" id="sn-tech" style="color:var(--tech)">TECH ARCHITECT</div><div class="sba-role">Technology Strategy</div></div><div class="sba-st" id="ss-tech">—</div></div>
+    <div class="sba"><input class="sba-chk" type="checkbox" id="chk-research" disabled /><div class="sba-dot" id="sd-research" style="background:var(--research)22"></div><div class="sba-info"><div class="sba-name" id="sn-research" style="color:var(--research)">RESEARCH INTEL</div><div class="sba-role">Market Intelligence</div></div><div class="sba-st" id="ss-research">—</div></div>
+  </div>
+
+  <div style="margin-top:10px">
+    <div id="sb-hist-lbl">RECENT RUNS</div>
+    <div id="sb-history"><div class="hist-empty">NO HISTORY YET</div></div>
+  </div>
+
+  <div id="sb-footer">
+    <div id="cost-display" style="font-family:DM Mono,monospace;font-size:8px;color:var(--text-muted);letter-spacing:1px;padding:4px 8px;text-align:center;border-bottom:1px solid var(--border);display:none"></div><div id="api-row" onclick="toggleApi()">
+      <div id="api-dot"></div><div id="conn-status" style="width:6px;height:6px;border-radius:50%;background:var(--cfo);flex-shrink:0;margin-left:auto" title="Online"></div>
+      <div id="api-lbl">API KEY NOT SET</div>
+      <span style="font-size:10px;color:var(--text-muted)">▾</span>
+    </div>
+    <div id="api-panel">
+      <input id="apikey" type="password" placeholder="sk-ant-..." />
+      <button id="savebtn" onclick="saveKey()">SAVE KEY</button>
+      <div id="api-ok">✓ KEY ACTIVE</div>
+    </div>
+    <div id="backup-row">
+      <button class="bk-btn" onclick="exportData()">⭳ EXPORT DATA</button>
+      <button class="bk-btn" onclick="document.getElementById('importfile').click()">⭱ IMPORT</button>
+      <input type="file" id="importfile" accept=".json" style="display:none" onchange="importData(this)" />
+    </div>
+  </div>
+</div>
+
+<!-- ── MAIN ──────────────────────────────────── -->
+<div id="content">
+  <div id="topbar">
+    <button id="meetings-btn" onclick="toggleMeetings()">MEETINGS</button>
+    <button id="guide-btn" onclick="toggleGuide()">GUIDE</button>
+    <div id="biz-switcher">
+      <div id="biz-lbl">ACTIVE BUSINESS</div>
+      <button id="biz-btn" onclick="toggleBizMenu(event)">
+        <span id="biz-btn-name">—</span>
+        <span id="biz-btn-arrow">▾</span>
+      </button>
+      <div id="biz-menu">
+        <div id="biz-menu-list"></div>
+        <div class="biz-action" onclick="openBizModal(null)">+ NEW BUSINESS</div>
+        <div class="biz-action" onclick="openBizModal('current')">⚙ EDIT CURRENT</div>
+      </div>
+    </div>
+    <button id="theme-btn" title="Toggle light / dark mode" onclick="toggleTheme()">◐ LIGHT</button>
+    <div id="tb-r"></div>
+  </div>
+
+  <div id="work">
+    <!-- UPLOAD -->
+    <div id="upload-sec">
+      <div class="sec-lbl">DOCUMENTS FOR ANALYSIS <span style="color:var(--border2)">(OPTIONAL)</span></div>
+      <div id="dropzone" ondragover="dzOver(event)" ondragleave="dzLeave()" ondrop="dzDrop(event)">
+        <input type="file" id="fileinput" multiple accept=".pdf,.txt,.md,.csv,.xlsx,.xls,.docx,.pptx,.jpg,.jpeg,.png,.gif,.webp" onchange="filesChosen(this.files)" />
+        <div id="dz-icon">⬆</div>
+        <div id="dz-title">DROP FILES OR CLICK TO BROWSE</div>
+        <div id="dz-sub">PDF · Word · Excel · PowerPoint · CSV · TXT · Images · Markdown</div>
+      </div>
+      <div id="proc-note"><span class="proc-ring"></span> PROCESSING...</div>
+      <div id="file-pills"></div>
+    </div>
+
+    <!-- SCOPE -->
+    <div id="scope-sec">
+      <div class="sec-lbl">DIRECTIVE SCOPE</div>
+      <div id="scope-toggle">
+        <button class="scope-btn active" id="scope-single" onclick="setScope('single')">SINGLE BUSINESS</button>
+        <button class="scope-btn" id="scope-cross" onclick="setScope('cross')">CROSS-BUSINESS</button>
+      </div>
+      <div id="cross-pick">
+        <div class="cross-hint">Select 2+ businesses — Fredrick briefs the agents on synergy &amp; conflict across them, and the result is filed under every business involved.</div>
+        <div id="cross-chips"></div>
+      </div>
+    </div>
+
+    <!-- DIRECTIVE -->
+    <div id="dir-sec" style="position:relative"><button id="task-expand" onclick="toggleTaskFullscreen()" style="position:absolute;right:12px;top:12px;background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:14px;z-index:2" title="Fullscreen">⛶</button>
+      <div class="sec-lbl">DIRECTIVE TO FREDRICK</div>
+      <textarea id="task" placeholder="Issue your directive. In AUTO mode, Fredrick selects the right agents. In MANUAL mode, you choose which agents run.&#10;&#10;Examples:&#10;• Model the 3-year IRR for the Cirquu equity stake at 3 exit scenarios&#10;• Review this MOU and flag the legal exposure before I sign&#10;• Structure the Vertex PPP framework for Liberia passport contract renewal&#10;• Assess whether to acquire or partner with this logistics company"></textarea>
+      <div id="task-hint"><span id="run-hint-key">⌘</span> + ENTER TO RUN</div>
+      <div id="biz-ctx-note">DIRECTIVE WILL BE SCOPED TO <span id="biz-ctx-name">—</span></div>
+    </div>
+
+    <div id="btnrow">
+      <button id="runbtn" onclick="go()">▶ ISSUE DIRECTIVE</button>
+      <button class="sbtn" id="rstbtn" onclick="resetAll()">↺ NEW DIRECTIVE</button>
+      <button class="sbtn" id="pdfbtn" onclick="downloadPDF()">↓ EXPORT PDF</button>
+    </div>
+    <div id="errbox"></div>
+
+    <!-- RESULTS -->
+    <div id="onboarding" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:28px 32px;margin-bottom:20px;text-align:center">
+  <div style="font-family:'Playfair Display',serif;font-size:18px;color:var(--gold);margin-bottom:8px">Welcome to Kunoch Command</div>
+  <div style="font-size:11px;color:var(--text-dim);margin-bottom:20px;line-height:1.6">Fredrick is ready. Three steps to your first executive briefing.</div>
+  <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:14px 18px;min-width:160px">
+      <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text-muted);letter-spacing:2px;margin-bottom:6px">STEP 1</div>
+      <div style="font-size:12px;color:var(--text);margin-bottom:8px">Set your API key</div>
+      <button onclick="toggleApi()" style="background:var(--gold);color:#000;border:none;border-radius:2px;padding:6px 12px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;cursor:pointer">OPEN PANEL</button>
+    </div>
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:14px 18px;min-width:160px">
+      <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text-muted);letter-spacing:2px;margin-bottom:6px">STEP 2</div>
+      <div style="font-size:12px;color:var(--text);margin-bottom:8px">Select a business</div>
+      <button onclick="toggleBizMenu(event)" style="background:var(--gold);color:#000;border:none;border-radius:2px;padding:6px 12px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;cursor:pointer">OPEN MENU</button>
+    </div>
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--r);padding:14px 18px;min-width:160px">
+      <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text-muted);letter-spacing:2px;margin-bottom:6px">STEP 3</div>
+      <div style="font-size:12px;color:var(--text);margin-bottom:8px">Issue a directive</div>
+      <button onclick="document.getElementById('task').focus()" style="background:var(--gold);color:#000;border:none;border-radius:2px;padding:6px 12px;font-family:'DM Mono',monospace;font-size:9px;letter-spacing:1px;cursor:pointer">START TYPING</button>
+    </div>
+  </div>
+</div>
+<div id="dispatch-progress" style="display:none;margin:14px 0">
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+    <div id="dp-fredrick" style="width:10px;height:10px;border-radius:50%;background:var(--border2);transition:all .3s"></div>
+    <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text-muted);letter-spacing:1px">FREDRICK</div>
+    <div style="flex:1;height:1px;background:var(--border)"></div>
+    <div id="dp-agents" style="display:flex;gap:6px"></div>
+    <div style="flex:1;height:1px;background:var(--border)"></div>
+    <div id="dp-synthesis" style="width:10px;height:10px;border-radius:50%;background:var(--border2);transition:all .3s"></div>
+    <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text-muted);letter-spacing:1px">SYNTHESIS</div>
+  </div>
+  <div id="dp-status" style="font-family:'DM Mono',monospace;font-size:9px;color:var(--text-dim);letter-spacing:1px;text-align:center"></div>
+</div>
+<div id="results">
+      <div id="cross-banner"></div>
+      <div id="fcard">
+        <div id="f-top"><div><div id="f-name">Fredrick</div><div id="f-role">CHIEF OF STAFF — TASK COORDINATION</div></div><div id="f-badge">ACTIVE</div></div>
+        <div id="f-sum"></div>
+        <div id="f-tags"></div>
+      </div>
+
+      <div class="sec-lbl" id="agents-lbl">SPECIALIST OUTPUTS</div>
+      <div id="out-grid">
+
+        <div class="acard" id="ac-cfo">
+          <div class="acard-bar" style="background:var(--cfo)"></div>
+          <div class="acard-inner">
+            <div class="acard-top"><div><div class="acard-name" style="color:var(--cfo)">CFO — FINANCIAL MODELLING</div><div class="acard-role">Revenue Models · IRR · NPV · P&amp;L</div></div><div class="acard-badge" id="ab-cfo" style="color:var(--cfo);background:var(--cfo)18;border:1px solid var(--cfo)33">—</div></div>
+            <div class="acard-brief" id="abr-cfo" onclick="toggleBrief('cfo')"><div class="acard-brief-lbl" style="color:var(--cfo)">FREDRICK'S BRIEF ▾</div><div class="acard-brief-text" id="abt-cfo"></div></div>
+            <div class="acard-body" id="ao-cfo"></div>
+            <div class="acard-footer"><button class="acard-star" id="star-cfo" onclick="toggleStar('cfo')">★</button><button class="retry-btn" id="ar-cfo" onclick="retryAgent('cfo')">↺ RETRY</button><button class="copy-btn" onclick="copyOutput('cfo')">COPY</button></div>
+          </div>
+        </div>
+
+        <div class="acard" id="ac-legal">
+          <div class="acard-bar" style="background:var(--legal)"></div>
+          <div class="acard-inner">
+            <div class="acard-top"><div><div class="acard-name" style="color:var(--legal)">LEGAL ADVISOR</div><div class="acard-role">Contracts · IP · Multi-jurisdiction</div></div><div class="acard-badge" id="ab-legal" style="color:var(--legal);background:var(--legal)18;border:1px solid var(--legal)33">—</div></div>
+            <div class="acard-brief" id="abr-legal" onclick="toggleBrief('legal')"><div class="acard-brief-lbl" style="color:var(--legal)">FREDRICK'S BRIEF ▾</div><div class="acard-brief-text" id="abt-legal"></div></div>
+            <div class="acard-body" id="ao-legal"></div>
+            <div class="acard-footer"><button class="acard-star" id="star-legal" onclick="toggleStar('legal')">★</button><button class="retry-btn" id="ar-legal" onclick="retryAgent('legal')">↺ RETRY</button><button class="copy-btn" onclick="copyOutput('legal')">COPY</button></div>
+          </div>
+        </div>
+
+        <div class="acard" id="ac-ma">
+          <div class="acard-bar" style="background:var(--ma)"></div>
+          <div class="acard-inner">
+            <div class="acard-top"><div><div class="acard-name" style="color:var(--ma)">M&amp;A STRATEGIST</div><div class="acard-role">Deals · Valuation · Due Diligence</div></div><div class="acard-badge" id="ab-ma" style="color:var(--ma);background:var(--ma)18;border:1px solid var(--ma)33">—</div></div>
+            <div class="acard-brief" id="abr-ma" onclick="toggleBrief('ma')"><div class="acard-brief-lbl" style="color:var(--ma)">FREDRICK'S BRIEF ▾</div><div class="acard-brief-text" id="abt-ma"></div></div>
+            <div class="acard-body" id="ao-ma"></div>
+            <div class="acard-footer"><button class="acard-star" id="star-ma" onclick="toggleStar('ma')">★</button><button class="retry-btn" id="ar-ma" onclick="retryAgent('ma')">↺ RETRY</button><button class="copy-btn" onclick="copyOutput('ma')">COPY</button></div>
+          </div>
+        </div>
+
+        <div class="acard" id="ac-ppp">
+          <div class="acard-bar" style="background:var(--ppp)"></div>
+          <div class="acard-inner">
+            <div class="acard-top"><div><div class="acard-name" style="color:var(--ppp)">PPP CONSULTANT</div><div class="acard-role">Gov't Contracts · Liberia · Nigeria</div></div><div class="acard-badge" id="ab-ppp" style="color:var(--ppp);background:var(--ppp)18;border:1px solid var(--ppp)33">—</div></div>
+            <div class="acard-brief" id="abr-ppp" onclick="toggleBrief('ppp')"><div class="acard-brief-lbl" style="color:var(--ppp)">FREDRICK'S BRIEF ▾</div><div class="acard-brief-text" id="abt-ppp"></div></div>
+            <div class="acard-body" id="ao-ppp"></div>
+            <div class="acard-footer"><button class="acard-star" id="star-ppp" onclick="toggleStar('ppp')">★</button><button class="retry-btn" id="ar-ppp" onclick="retryAgent('ppp')">↺ RETRY</button><button class="copy-btn" onclick="copyOutput('ppp')">COPY</button></div>
+          </div>
+        </div>
+
+        <div class="acard" id="ac-board">
+          <div class="acard-bar" style="background:var(--board)"></div>
+          <div class="acard-inner">
+            <div class="acard-top"><div><div class="acard-name" style="color:var(--board)">BOARD ADVISOR</div><div class="acard-role">Governance · Family Office · Exit</div></div><div class="acard-badge" id="ab-board" style="color:var(--board);background:var(--board)18;border:1px solid var(--board)33">—</div></div>
+            <div class="acard-brief" id="abr-board" onclick="toggleBrief('board')"><div class="acard-brief-lbl" style="color:var(--board)">FREDRICK'S BRIEF ▾</div><div class="acard-brief-text" id="abt-board"></div></div>
+            <div class="acard-body" id="ao-board"></div>
+            <div class="acard-footer"><button class="acard-star" id="star-board" onclick="toggleStar('board')">★</button><button class="retry-btn" id="ar-board" onclick="retryAgent('board')">↺ RETRY</button><button class="copy-btn" onclick="copyOutput('board')">COPY</button></div>
+          </div>
+        </div>
+
+        <div class="acard" id="ac-tech">
+          <div class="acard-bar" style="background:var(--tech)"></div>
+          <div class="acard-inner">
+            <div class="acard-top"><div><div class="acard-name" style="color:var(--tech)">TECH ARCHITECT</div><div class="acard-role">AI · SaaS · Digital Infrastructure</div></div><div class="acard-badge" id="ab-tech" style="color:var(--tech);background:var(--tech)18;border:1px solid var(--tech)33">—</div></div>
+            <div class="acard-brief" id="abr-tech" onclick="toggleBrief('tech')"><div class="acard-brief-lbl" style="color:var(--tech)">FREDRICK'S BRIEF ▾</div><div class="acard-brief-text" id="abt-tech"></div></div>
+            <div class="acard-body" id="ao-tech"></div>
+            <div class="acard-footer"><button class="acard-star" id="star-tech" onclick="toggleStar('tech')">★</button><button class="retry-btn" id="ar-tech" onclick="retryAgent('tech')">↺ RETRY</button><button class="copy-btn" onclick="copyOutput('tech')">COPY</button></div>
+          </div>
+        </div>
+
+        <div class="acard" id="ac-research">
+          <div class="acard-bar" style="background:var(--research)"></div>
+          <div class="acard-inner">
+            <div class="acard-top"><div><div class="acard-name" style="color:var(--research)">RESEARCH INTEL</div><div class="acard-role">Market Data · Competitors · Trends</div></div><div class="acard-badge" id="ab-research" style="color:var(--research);background:var(--research)18;border:1px solid var(--research)33">—</div></div>
+            <div class="acard-brief" id="abr-research" onclick="toggleBrief('research')"><div class="acard-brief-lbl" style="color:var(--research)">FREDRICK'S BRIEF ▾</div><div class="acard-brief-text" id="abt-research"></div></div>
+            <div class="acard-body" id="ao-research"></div>
+            <div class="acard-footer"><button class="acard-star" id="star-research" onclick="toggleStar('research')">★</button><button class="retry-btn" id="ar-research" onclick="retryAgent('research')">↺ RETRY</button><button class="copy-btn" onclick="copyOutput('research')">COPY</button></div>
+          </div>
+        </div>
+
+      </div>
+
+      <div id="syn-card">
+        <div id="syn-hdr"><div id="syn-title">Executive Briefing</div><div id="syn-wc" style="font-family:DM Mono,monospace;font-size:8px;color:var(--text-muted);letter-spacing:1px;margin-top:4px"></div><div id="syn-lbl">FREDRICK'S SYNTHESIS</div></div>
+        <div id="syn-body"></div>
+        <div id="syn-footer"><button class="copy-btn" onclick="copySyn()">COPY BRIEFING</button></div>
+      </div>
+    <div id="followup-sec" style="display:none;margin-top:20px;padding:20px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r)">
+  <div style="font-family:DM Mono,monospace;font-size:9px;color:var(--text-muted);letter-spacing:2px;margin-bottom:10px">FOLLOW-UP</div>
+  <textarea id="followup-task" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-left:2px solid var(--gold);border-radius:var(--r);color:var(--text);padding:12px 14px;font-size:12px;font-family:DM Sans,sans-serif;resize:vertical;outline:none;line-height:1.6;min-height:80px;display:block;margin-bottom:10px" placeholder="Ask a follow-up question to specific agents..."></textarea>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px" id="followup-agents"></div>
+  <button id="followup-btn" onclick="runFollowUp()" style="background:var(--gold);color:#000;border:none;border-radius:var(--r);padding:10px 24px;font-size:10px;letter-spacing:2px;font-family:DM Mono,monospace;font-weight:500;cursor:pointer">▶ RUN FOLLOW-UP</button>
+</div>
+</div>
+  </div>
+</div>
+</div>
+
+<!-- ── BUSINESS PROFILE MODAL ──────────────────── -->
+<div id="modal-backdrop" onclick="if(event.target.id==='modal-backdrop')closeBizModal()">
+  <div id="modal">
+    <div id="modal-hdr">
+      <div>
+        <div id="modal-title">Business Profile</div>
+        <div id="modal-sub">CONTEXT INJECTED INTO EVERY DIRECTIVE</div>
+      </div>
+      <button id="modal-close" onclick="closeBizModal()">×</button>
+    </div>
+    <div id="modal-tabs">
+      <button class="mtab active" data-tab="profile" onclick="switchTab('profile')">PROFILE</button>
+      <button class="mtab" data-tab="brand" onclick="switchTab('brand')">BRAND</button>
+    </div>
+    <div id="modal-body">
+
+      <div class="mpane active" id="pane-profile">
+        <div class="mgrid">
+          <div class="mfield mgrid-full">
+            <div class="mlbl">Business Name</div>
+            <input class="minp" id="f-name" type="text" placeholder="e.g. Cirquu" />
+          </div>
+          <div class="mfield">
+            <div class="mlbl">Legal Entity</div>
+            <input class="minp" id="f-legal" type="text" placeholder="e.g. Cirquu Technologies Ltd" />
+          </div>
+          <div class="mfield">
+            <div class="mlbl">Jurisdiction(s)</div>
+            <input class="minp" id="f-juris" type="text" placeholder="Nigeria, UK" />
+          </div>
+          <div class="mfield mgrid-full">
+            <div class="mlbl">One-line Positioning</div>
+            <input class="minp" id="f-positioning" type="text" placeholder="What it is, in one sentence" />
+          </div>
+          <div class="mfield">
+            <div class="mlbl">Stage</div>
+            <select class="msel" id="f-stage">
+              <option value="">—</option>
+              <option value="idea">Idea</option>
+              <option value="pilot">Pilot</option>
+              <option value="revenue">Revenue</option>
+              <option value="scaling">Scaling</option>
+              <option value="mature">Mature</option>
+            </select>
+          </div>
+          <div class="mfield">
+            <div class="mlbl">Revenue Band</div>
+            <div class="mrev">
+              <input class="minp" id="f-revenue" type="text" placeholder="e.g. 500K–1M" />
+              <select class="msel" id="f-currency">
+                <option value="USD">USD</option>
+                <option value="NGN">NGN</option>
+                <option value="GBP">GBP</option>
+                <option value="EUR">EUR</option>
+              </select>
+            </div>
+          </div>
+          <div class="mfield mgrid-full">
+            <div class="mlbl">Business Model</div>
+            <textarea class="mtxt" id="f-model" placeholder="How it makes money. Revenue model, GTM, key mechanics."></textarea>
+          </div>
+          <div class="mfield mgrid-full">
+            <div class="mlbl">Target Customer</div>
+            <input class="minp" id="f-customer" type="text" placeholder="Who buys / who it serves" />
+          </div>
+          <div class="mfield mgrid-full">
+            <div class="mlbl">Key People</div>
+            <input class="minp" id="f-people" type="text" placeholder="Founders, board, critical hires" />
+          </div>
+          <div class="mfield mgrid-full">
+            <div class="mlbl">Top 3 Active Priorities</div>
+            <input class="minp" id="f-p1" type="text" placeholder="Priority 1" style="margin-bottom:6px" />
+            <input class="minp" id="f-p2" type="text" placeholder="Priority 2" style="margin-bottom:6px" />
+            <input class="minp" id="f-p3" type="text" placeholder="Priority 3" />
+          </div>
+          <div class="mfield mgrid-full">
+            <div class="mlbl">Non-negotiables / Constraints</div>
+            <textarea class="mtxt" id="f-constraints" placeholder='e.g. "No dilution below 25%", "Nigeria-first", "Board approval required above $500K"'></textarea>
+          </div>
+          <div class="mfield mgrid-full">
+            <div class="mlbl">Competitive Landscape</div>
+            <textarea class="mtxt" id="f-competitors" placeholder="Key competitors and how this business is differentiated"></textarea>
+          </div>
+          <div class="mfield mgrid-full">
+            <div class="mlbl">Current Challenges</div>
+            <textarea class="mtxt" id="f-challenges" placeholder="Active pain points, blockers, or open questions"></textarea>
+          </div>
+          <div class="mfield mgrid-full" style="display:flex;align-items:center;gap:10px;padding-top:8px;border-top:1px solid var(--border)">
+            <input type="checkbox" id="f-auto-review" style="width:16px;height:16px;cursor:pointer" />
+            <div>
+              <div style="font-size:11px;color:var(--text);font-weight:500">Auto-run Weekly Review</div>
+              <div style="font-size:9px;color:var(--text-muted)">Every Monday 07:00 Lagos · Claude generates portfolio brief</div>
+            </div>
+            <input type="checkbox" id="f-autoreview-email" style="width:16px;height:16px;cursor:pointer;margin-left:14px" />
+            <div>
+              <div style="font-size:11px;color:var(--text);font-weight:500">Also email me</div>
+              <div style="font-size:9px;color:var(--text-muted)">Each weekly review to your login inbox (needs server email key)</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="mpane" id="pane-brand">
+        <div class="mgrid">
+          <div class="mfield">
+            <div class="mlbl">Primary Colour</div>
+            <div class="mhex">
+              <input type="color" id="f-c1-picker" value="#C9A84C" />
+              <input type="text" id="f-c1" value="#C9A84C" />
+            </div>
+          </div>
+          <div class="mfield">
+            <div class="mlbl">Secondary Colour</div>
+            <div class="mhex">
+              <input type="color" id="f-c2-picker" value="#1A1D2B" />
+              <input type="text" id="f-c2" value="#1A1D2B" />
+            </div>
+          </div>
+          <div class="mfield">
+            <div class="mlbl">Accent Colour</div>
+            <div class="mhex">
+              <input type="color" id="f-c3-picker" value="#34D399" />
+              <input type="text" id="f-c3" value="#34D399" />
+            </div>
+          </div>
+          <div class="mfield"></div>
+          <div class="mfield">
+            <div class="mlbl">Heading Font</div>
+            <input class="minp" id="f-font-h" type="text" placeholder="e.g. Playfair Display" />
+          </div>
+          <div class="mfield">
+            <div class="mlbl">Body Font</div>
+            <input class="minp" id="f-font-b" type="text" placeholder="e.g. DM Sans" />
+          </div>
+          <div class="mfield mgrid-full">
+            <div class="mlbl">Tone of Voice</div>
+            <textarea class="mtxt" id="f-tone" placeholder="How this brand sounds. Confident? Playful? Clinical? Describe the voice and give examples."></textarea>
+          </div>
+          <div class="mfield mgrid-full">
+            <div class="mlbl">Brand Values (3–5 words)</div>
+            <input class="minp" id="f-values" type="text" placeholder="e.g. Bold · Precise · Human" />
+          </div>
+          <div class="mfield">
+            <div class="mlbl">Brand Do's</div>
+            <textarea class="mtxt" id="f-dos" placeholder="What to always do"></textarea>
+          </div>
+          <div class="mfield">
+            <div class="mlbl">Brand Don'ts</div>
+            <textarea class="mtxt" id="f-donts" placeholder="What to never do"></textarea>
+          </div>
+        </div>
+      </div>
+
+    </div>
+    <div id="modal-footer">
+      <button class="mbtn mbtn-delete" id="modal-delete" onclick="deleteBusiness()">DELETE</button>
+      <div id="modal-footer-right">
+        <button class="mbtn mbtn-cancel" onclick="closeBizModal()">CANCEL</button>
+        <button class="mbtn mbtn-save" onclick="saveBusiness()">SAVE</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ── KELECHI CONTEXT (portfolio backdrop — stays stable across all businesses) ── */
+var CTX=[
+  "Principal: Kelechi Dozie, Group CEO of Kunoch Family Office, Lagos Nigeria.",
+  "Portfolio: Insight360 (growth consultancy), Disrupt DNA (creative agency), Onalaja (luxury womenswear, onalaja.com), Iamloyal Africa, Getabar, D4ULogistics, LID Stores.",
+  "Family Office subsidiaries: IFTA Farms, Kunoch Foods — governed by a four-brother board.",
+  "Co-founder & CMO of Cirquu (25% equity): AI-powered ERP SaaS built on Odoo, targeting African SMEs.",
+  "Government contract: Vertex Technology — PPP with Liberia Ministry of Foreign Affairs for biometric passport enrollment.",
+  "Jurisdictions: Nigeria (primary), Liberia, United Kingdom.",
+  "Decision framework: ROI timeline, asset control, jurisdictional protection, scalability, valuation multiple expansion, leverage potential, exit optionality.",
+  "Financial standards: investor-grade output, USD/NGN/GBP clarity, multi-year projections, sensitivity analysis, IRR, NPV, debt leverage.",
+  "Style: board-level tone, executive summaries first, numbers over opinions, direct — no fluff."
+].join(" ");
+
+/* ── AGENT SYSTEM PROMPTS ─────────────────────── */
+var SP={
+
+fredrick:[
+  "You are Fredrick, Chief of Staff to Kelechi Dozie.",CTX,
+  "Every directive is issued in the context of ONE active business — its full profile (mission, stage, priorities, constraints, brand spec) is prepended to the user message.",
+  "Ground your task_summary and every brief in that specific business's reality. Defer to its stated priorities and constraints. Flag anything in the directive that contradicts them.",
+  "Your function: receive the task (and any attached documents), then coordinate the right specialist agents.",
+  "AVAILABLE AGENTS: cfo, legal, ma, ppp, board, tech, research.",
+  "Select 2-4 most relevant. Write a sharp, specific analytical brief for each — not generic instructions.",
+  "The brief must tell the agent exactly what angle to take and what output is needed for this specific business and task.",
+  "If the task involves brand, marketing, creative, or campaign work — explicitly instruct agents to respect the active brand spec (colours, fonts, tone, values, do's/don'ts).",
+  "Respond ONLY in raw JSON (no markdown fences):",
+  '{"task_summary":"one sentence","agents_selected":["id1","id2"],"briefs":{"id1":"specific brief","id2":"specific brief"}}'
+].join("\n"),
+
+cfo:[
+  "You are CFO & Financial Modelling Advisor to Kelechi Dozie.",CTX,
+  "SKILLS: revenue modelling, multi-year P&L projections, IRR/NPV/MOIC calculations, sensitivity analysis,",
+  "scenario modelling (bear/base/bull), capital structure, debt leverage, equity dilution analysis,",
+  "unit economics, break-even analysis, valuation multiples (EV/EBITDA, P/E, ARR multiples for SaaS),",
+  "FX modelling (USD/NGN/GBP), working capital cycles, cash runway forecasting.",
+  "MANDATE: Analyse any attached documents alongside your brief.",
+  "Output format:",
+  "FINANCIAL ASSESSMENT — the key numbers that matter",
+  "MODEL INPUTS & ASSUMPTIONS — what drives the model",
+  "SCENARIOS — Bear / Base / Bull with headline figures",
+  "RETURN PROFILE — IRR, NPV, payback period, or MOIC where applicable",
+  "FINANCIAL RISK — top 2-3 financial risks with quantified exposure",
+  "CFO CALL — your bottom-line financial recommendation in one sentence",
+  "Be precise. Use actual numbers. Show your working where useful. Max 350 words."
+].join("\n"),
+
+legal:[
+  "You are Legal Advisor & In-House Counsel to Kelechi Dozie.",CTX,
+  "SKILLS: contract drafting and review, IP protection (trademark, copyright, trade secrets),",
+  "corporate structuring (SPVs, holding companies, shareholder agreements),",
+  "Nigerian company law (CAMA 2020), Liberian business regulations, UK company law,",
+  "cross-border transaction structuring, MOU and JV agreement review,",
+  "data protection (NDPR Nigeria, GDPR UK), employment law, regulatory compliance,",
+  "government contract law, PPP legal frameworks, equity and investment agreement review.",
+  "MANDATE: Analyse any attached documents alongside your brief.",
+  "Output format:",
+  "PRIMARY LEGAL RISK — the most serious exposure in this situation",
+  "CONTRACT/IP FLAGS — specific clauses, terms, or IP issues to address",
+  "JURISDICTION NOTES — Nigeria/Liberia/UK-specific legal considerations",
+  "STRUCTURING RECOMMENDATION — optimal legal structure to protect Kelechi's interests",
+  "COMPLIANCE CHECKLIST — what must be done to be legally compliant",
+  "LEGAL ACTION — the single most important legal step to take first",
+  "Be blunt. Flag real risks, not hypothetical ones. Max 300 words."
+].join("\n"),
+
+ma:[
+  "You are M&A Strategist & Deal Advisor to Kelechi Dozie.",CTX,
+  "SKILLS: deal sourcing and origination, buy-side and sell-side M&A advisory,",
+  "valuation methodologies (DCF, comparables, precedent transactions, asset-based),",
+  "due diligence frameworks (commercial, financial, legal, operational),",
+  "deal structuring (earn-outs, deferred consideration, equity rollovers, vendor financing),",
+  "LOI and term sheet drafting, negotiation strategy, integration planning,",
+  "exit strategy (trade sale, IPO, secondary buyout, recapitalisation),",
+  "African market M&A dynamics, cross-border deal execution Nigeria/Liberia/UK.",
+  "MANDATE: Analyse any attached documents alongside your brief.",
+  "Output format:",
+  "DEAL THESIS — why this deal makes strategic sense (or doesn't)",
+  "VALUATION RANGE — estimated value with methodology and key assumptions",
+  "DEAL STRUCTURE — recommended structure with rationale",
+  "DUE DILIGENCE FLAGS — top 3 items to investigate before proceeding",
+  "NEGOTIATION LEVERAGE — what Kelechi's strengths and risks are in this negotiation",
+  "M&A RECOMMENDATION — proceed, restructure, or walk away — and why",
+  "Numbers first. Max 300 words."
+].join("\n"),
+
+ppp:[
+  "You are PPP Consultant & Government Partnership Advisor to Kelechi Dozie.",CTX,
+  "SKILLS: Public-Private Partnership structuring and negotiation,",
+  "government contract origination and tendering (Nigeria, Liberia),",
+  "concession agreements, build-operate-transfer (BOT), service contracts, framework agreements,",
+  "donor and DFI funding alignment (World Bank, IFC, AfDB, USAID, EU),",
+  "regulatory and political risk assessment, MOU and framework agreement drafting,",
+  "Liberia investment climate, NIC Liberia, MCC compact programs,",
+  "Nigerian Federal/State government procurement, PENCOM, CAC, NITDA regulations,",
+  "biometric and identity technology procurement, GovTech PPP frameworks.",
+  "MANDATE: Analyse any attached documents alongside your brief.",
+  "Output format:",
+  "PPP STRUCTURE — recommended partnership model and rationale",
+  "GOVERNMENT LEVERAGE — how to position for this contract or relationship",
+  "FUNDING ANGLES — DFI, donor, or co-financing options available",
+  "POLITICAL & REGULATORY RISK — key risks and mitigation",
+  "STAKEHOLDER MAP — who matters and what they need to see",
+  "PPP ACTION — the single most important move to advance this opportunity",
+  "Be specific about Liberia/Nigeria context. Max 300 words."
+].join("\n"),
+
+board:[
+  "You are Board Advisor & Governance Strategist to Kelechi Dozie.",CTX,
+  "SKILLS: family office governance, board composition and dynamics,",
+  "shareholder and founder-family relationship management,",
+  "multi-subsidiary oversight (holding company structures),",
+  "strategic planning and portfolio review, KPI frameworks for family businesses,",
+  "succession planning and wealth preservation, institutional investor relations,",
+  "ESG integration for African businesses, board communication and reporting,",
+  "conflict resolution in family-controlled businesses, capital allocation across portfolio,",
+  "founder liquidity strategies, long-term value creation vs. short-term extraction.",
+  "MANDATE: Analyse any attached documents alongside your brief.",
+  "Output format:",
+  "GOVERNANCE LENS — how this decision looks from the board's perspective",
+  "STAKEHOLDER IMPACT — effect on the four-brother board, subsidiaries, and partners",
+  "STRATEGIC FIT — how this aligns with Kunoch Family Office's long-term direction",
+  "RISK TO REPUTATION/LEGACY — any reputational or legacy considerations",
+  "PORTFOLIO IMPACT — how this affects the wider portfolio (Cirquu, HaulEasy, IFTA, etc.)",
+  "BOARD RECOMMENDATION — what you would recommend presenting to the board",
+  "Think long-term. Max 300 words."
+].join("\n"),
+
+tech:[
+  "You are Tech Architect & Digital Strategy Advisor to Kelechi Dozie.",CTX,
+  "SKILLS: AI and machine learning strategy, SaaS product architecture,",
+  "ERP systems (Odoo, SAP, Oracle), API integrations and ecosystem design,",
+  "cloud infrastructure (AWS, GCP, Azure), cybersecurity and data governance,",
+  "digital transformation for SMEs and enterprises in Africa,",
+  "biometric systems, identity verification technology, GovTech digital infrastructure,",
+  "mobile-first and USSD product design for African markets,",
+  "fintech integrations, payments infrastructure, logistics technology,",
+  "AI-powered product features, LLM integrations, agentic systems,",
+  "build vs. buy vs. partner decisions, vendor evaluation, technical due diligence.",
+  "MANDATE: Analyse any attached documents alongside your brief.",
+  "Output format:",
+  "TECHNICAL ASSESSMENT — what the technology situation actually is",
+  "ARCHITECTURE RECOMMENDATION — recommended approach or structure",
+  "BUILD vs. BUY vs. PARTNER — with rationale",
+  "RISKS & DEPENDENCIES — technical risks, single points of failure, vendor lock-in",
+  "CIRQUU IMPLICATIONS — any connection to or impact on the Cirquu roadmap",
+  "TECH CALL — the single most important technical decision to make first",
+  "Be specific and practical. No theoretical frameworks. Max 300 words."
+].join("\n"),
+
+research:[
+  "You are Research & Intelligence Analyst for Kelechi Dozie.",CTX,
+  "SKILLS: primary and secondary market research, competitive intelligence,",
+  "industry sizing and growth modelling, consumer and SME behaviour analysis,",
+  "African market dynamics (Nigeria, Liberia, West Africa), regulatory landscape mapping,",
+  "competitor benchmarking, partnership and acquisition target identification,",
+  "news and signal monitoring, investment thesis validation, sector deep-dives.",
+  "MANDATE: Analyse any attached documents alongside your brief.",
+  "Output format:",
+  "MARKET CONTEXT — key numbers: market size, growth rate, relevant dynamics",
+  "COMPETITIVE LANDSCAPE — who else is doing this, how they're positioned, what gaps exist",
+  "KEY INSIGHT — the single most important non-obvious finding",
+  "SIGNAL — an early-stage trend or signal worth watching",
+  "RISK FLAGS — 2-3 data-backed risks to be aware of",
+  "Numbers first. Cite specific data points. Max 300 words."
+].join("\n"),
+
+synthesis:[
+  "You are Fredrick, Chief of Staff to Kelechi Dozie.",CTX,
+  "This directive was issued in the context of ONE active business — its profile is prepended to the input.",
+  "Every recommendation, tension, and next step must be grounded in that business's specific reality, priorities, and constraints.",
+  "You have received outputs from specialist agents. Synthesise into one decisive executive briefing.",
+  "",
+  "Format exactly:",
+  "",
+  "1. SITUATION",
+  "[2-3 sentences: what is the actual situation for this specific business? Be specific.]",
+  "",
+  "2. KEY TENSIONS",
+  "[2-3 bullet points: the real trade-offs or conflicts between agent outputs, in the context of this business]",
+  "",
+  "3. RECOMMENDATION",
+  "[One clear recommendation grounded in this business's priorities. What should Kelechi do? One paragraph, no hedging.]",
+  "",
+  "4. NEXT STEPS",
+  "[Exactly 3 numbered actions. Specific, assigned if possible, time-bound.]",
+  "",
+  "Max 380 words. Board-level tone. No filler."
+].join("\n"),
+
+fredrickCross:[
+  "You are Fredrick, Chief of Staff to Kelechi Dozie.",CTX,
+  "This is a CROSS-BUSINESS directive spanning 2+ businesses in the Kunoch portfolio — ALL their profiles are prepended.",
+  "Brief the specialists to analyse ACROSS the businesses: synergies to exploit, conflicts and resource contention to resolve, sequencing, and portfolio-level trade-offs. Every brief must name the specific businesses it concerns and ask for cross-business, not single-business, analysis.",
+  "AVAILABLE AGENTS: cfo, legal, ma, ppp, board, tech, research. Select 2-4 most relevant to a PORTFOLIO-level analysis (board and ma are often central to cross-business questions).",
+  "Respond ONLY in raw JSON (no markdown fences):",
+  '{"task_summary":"one sentence naming the portfolio question","agents_selected":["id1","id2"],"briefs":{"id1":"cross-business brief","id2":"cross-business brief"}}'
+].join("\n"),
+
+synthesisCross:[
+  "You are Fredrick, Chief of Staff to Kelechi Dozie.",CTX,
+  "This CROSS-BUSINESS directive spans 2+ businesses (all profiles prepended). Synthesise the specialist outputs into one portfolio-level executive briefing.",
+  "",
+  "Format exactly:",
+  "",
+  "1. PORTFOLIO SITUATION",
+  "[2-3 sentences on the cross-business picture — how these businesses relate on this question.]",
+  "",
+  "2. SYNERGIES",
+  "[Bullets: concrete synergies between the named businesses, with the mechanism and who benefits.]",
+  "",
+  "3. CONFLICTS & CONTENTION",
+  "[Bullets: conflicts, resource contention (capital, people, attention), or strategic tension between the named businesses.]",
+  "",
+  "4. RECOMMENDATION",
+  "[One clear portfolio-level recommendation: which business leads, which follows, and in what sequence. No hedging.]",
+  "",
+  "5. NEXT STEPS",
+  "[Exactly 3 numbered actions, each tagged to the specific business(es) it concerns.]",
+  "",
+  "Max 420 words. Board-level tone. No filler."
+].join("\n")
+};
+
+var AN={cfo:"CFO",legal:"Legal Advisor",ma:"M&A Strategist",ppp:"PPP Consultant",board:"Board Advisor",tech:"Tech Architect",research:"Research Intel"};
+var ACOL={cfo:"var(--cfo)",legal:"var(--legal)",ma:"var(--ma)",ppp:"var(--ppp)",board:"var(--board)",tech:"var(--tech)",research:"var(--research)"};
+var ACOLS_PDF={cfo:"#1a8a5a",legal:"#8a1a1a",ma:"#4a2a8a",ppp:"#8a4a1a",board:"#8a7030",tech:"#1a6b8a",research:"#8a2a60"};
+
+/* ── MEETING INTELLIGENCE PROMPT ─────────────── */
+var MEETING_SYSTEM=`You are a board-level meeting intelligence analyst for a Nigerian family office. Extract structured data from the meeting transcript below.
+
+Return ONLY a JSON object with this exact structure:
+{
+  "date": "YYYY-MM-DD or best guess",
+  "platform": "Zoom|Teams|Google Meet|Zoho|in-person|phone|other",
+  "attendees": ["Name, Role", "Name, Role"],
+  "agenda": "One-line purpose",
+  "decisions": ["Decision 1", "Decision 2"],
+  "action_items": [{"task":"...","owner":"...","due":"YYYY-MM-DD or relative"}],
+  "open_questions": ["Question 1"],
+  "flags": ["Governance or risk flag"],
+  "summary": "2-3 sentence executive summary"
+}
+
+Rules:
+- Use ISO dates; if relative, convert to actual date
+- Action items MUST have an owner (TBD if unclear)
+- Flag unassigned decisions, missing deadlines, governance gaps
+- Preserve Nigerian / UK / Liberian jurisdictional context
+- Board-level tone. No filler.`;
+
+var WEEKLY_REVIEW_SYSTEM=`You are Fredrick, Chief of Staff to the Group CEO of Kunoch Family Office. Write a weekly meeting intelligence brief.
+
+Input: a JSON array of meetings with decisions, action_items, open_questions, flags.
+
+Output format (Markdown):
+# WEEKLY PORTFOLIO BRIEF — [BUSINESS NAME]
+## 1. STATE OF PLAY
+[2-3 sentences on cadence and sentiment]
+## 2. DECISIONS THIS WEEK
+[Bullet list]
+## 3. ACTION ITEMS
+[Table: Task | Owner | Due | Status]
+## 4. OPEN QUESTIONS
+[Bullet list with recommended owner]
+## 5. FLAGS & RISKS
+[Red/yellow/green classification]
+## 6. NEXT WEEK PRIORITIES
+[3 specific items]
+
+Tone: investor-grade, numbers over opinions, USD/NGN/GBP clarity.`;
+
+/* ── BUSINESS MANAGEMENT ─────────────────────── */
+var DEFAULT_BUSINESSES=[
+  {id:'cirquu',name:'Cirquu',legal_entity:'',jurisdictions:'Nigeria, UK',positioning:'AI-powered ERP SaaS built on Odoo, targeting African SMEs',stage:'pilot',revenue:'',currency:'USD',business_model:'SaaS subscription. GTM bundled with Insight360 consulting. Portfolio businesses serve as pilot customers for case study generation.',target_customer:'African SMEs',key_people:'Kelechi Dozie (CMO, co-founder, 25% equity)',p1:'Public launch and pilot customer acquisition',p2:'Consulting + technology bundled GTM via Insight360',p3:'Case study generation from portfolio deployments',constraints:'Protect 25% equity stake. Africa-first product decisions.',competitors:'Odoo partners, Zoho, SAP Business One, regional ERP providers',challenges:'GTM execution, pricing for African SME budgets, localisation',c1:'#4FC3F7',c2:'#0E1018',c3:'#C9A84C',font_h:'',font_b:'',tone:'Confident, technical but accessible. Speaks to African SME operators who want modern tools without enterprise complexity.',values:'Accessible · Modern · African',dos:'Lead with outcomes. Use SME-relevant examples.',donts:"Don't overuse enterprise jargon. Don't compare to SAP unprompted."},
+  {id:'ifta',name:'IFTA Farms',legal_entity:'',jurisdictions:'Nigeria',positioning:'Agriculture subsidiary of Kunoch Family Office',stage:'',revenue:'',currency:'NGN',business_model:'',target_customer:'',key_people:'Four-brother board (Kunoch Family Office governance)',p1:'',p2:'',p3:'',constraints:'Board approval required for capex above threshold.',competitors:'',challenges:'',c1:'#34D399',c2:'#0E1018',c3:'#C9A84C',font_h:'',font_b:'',tone:'',values:'',dos:'',donts:''},
+  {id:'onalaja',name:'Onalaja',legal_entity:'',jurisdictions:'UK, Nigeria',positioning:'Luxury womenswear with demi-couture elements — Nigerian heritage meets Italian design aesthetics (onalaja.com)',stage:'revenue',revenue:'',currency:'GBP',business_model:'Made-to-order, hand-embellished. DTC Shopify store plus stockists; all sales final; ships worldwide, dispatched from the UK. Signature lines: Zusi (hand-embellished dresses) and Zaza (hand-beaded bags), price points ~£95–£4,900.',target_customer:'',key_people:'Kelechi Dozie',p1:'UK design studio — Class E commercial within 15 mins of NW2 2NA',p2:'',p3:'',constraints:'',competitors:'',challenges:'',c1:'#C9A84C',c2:'#0E1018',c3:'#F472B6',font_h:'Playfair Display',font_b:'DM Sans',tone:'Maximalist brand voice — the Onalaja Hive, bee motif.',values:'',dos:'',donts:''},
+  {id:'insight360',name:'Insight360',legal_entity:'',jurisdictions:'Nigeria',positioning:'Strategic growth and transformation consultancy',stage:'revenue',revenue:'',currency:'USD',business_model:'Advisory and consulting. Absorbed all operations from legacy entity IONEC (retained for track record). Bundled with Cirquu for consulting + technology GTM.',target_customer:'African SMEs and mid-market',key_people:'Kelechi Dozie (founder)',p1:'Cirquu bundled GTM execution',p2:'EU / Liberia PPP pipeline engagement',p3:'',constraints:'',competitors:'',challenges:'',c1:'#A78BFA',c2:'#0E1018',c3:'#C9A84C',font_h:'',font_b:'',tone:'',values:'',dos:'',donts:''},
+  {id:'disruptdna',name:'Disrupt DNA',legal_entity:'',jurisdictions:'Nigeria',positioning:'Creative agency',stage:'',revenue:'',currency:'NGN',business_model:'',target_customer:'',key_people:'',p1:'',p2:'',p3:'',constraints:'',competitors:'',challenges:'',c1:'#F472B6',c2:'#0E1018',c3:'#C9A84C',font_h:'',font_b:'',tone:'',values:'',dos:'',donts:''},
+  {id:'kunochfoods',name:'Kunoch Foods',legal_entity:'',jurisdictions:'Nigeria',positioning:'FMCG subsidiary of Kunoch Family Office',stage:'',revenue:'',currency:'NGN',business_model:'',target_customer:'',key_people:'Four-brother board',p1:'',p2:'',p3:'',constraints:'Board approval required for strategic decisions.',competitors:'',challenges:'',c1:'#FB923C',c2:'#0E1018',c3:'#C9A84C',font_h:'',font_b:'',tone:'',values:'',dos:'',donts:''},
+  {id:'iamloyal',name:'Iamloyal Africa',legal_entity:'',jurisdictions:'Nigeria',positioning:'Hybrid physical/app loyalty platform',stage:'idea',revenue:'',currency:'NGN',business_model:'Loyalty card with earn/burn mechanics, Nigerian telecom integrations, hybrid physical card + app architecture.',target_customer:'Nigerian youth (voter mobilization use case)',key_people:'',p1:'Novus Loyalty demo brief execution',p2:'Nigerian telecom integration partnerships',p3:'',constraints:'',competitors:'',challenges:'',c1:'#34D399',c2:'#0E1018',c3:'#C9A84C',font_h:'',font_b:'',tone:'',values:'',dos:'',donts:''},
+  {id:'getabar',name:'Getabar',legal_entity:'',jurisdictions:'',positioning:'',stage:'',revenue:'',currency:'NGN',business_model:'',target_customer:'',key_people:'',p1:'',p2:'',p3:'',constraints:'',competitors:'',challenges:'',c1:'#FB923C',c2:'#0E1018',c3:'#C9A84C',font_h:'',font_b:'',tone:'',values:'',dos:'',donts:''},
+  {id:'d4ulogistics',name:'D4ULogistics',legal_entity:'',jurisdictions:'Nigeria',positioning:'Logistics',stage:'',revenue:'',currency:'NGN',business_model:'',target_customer:'',key_people:'',p1:'',p2:'',p3:'',constraints:'',competitors:'',challenges:'',c1:'#4FC3F7',c2:'#0E1018',c3:'#C9A84C',font_h:'',font_b:'',tone:'',values:'',dos:'',donts:''},
+  {id:'lidstores',name:'LID Stores',legal_entity:'',jurisdictions:'Nigeria',positioning:'Retail',stage:'',revenue:'',currency:'NGN',business_model:'',target_customer:'',key_people:'',p1:'',p2:'',p3:'',constraints:'',competitors:'',challenges:'',c1:'#D4AF37',c2:'#0E1018',c3:'#34D399',font_h:'',font_b:'',tone:'',values:'',dos:'',donts:''}
+];
+
+var businesses=[],activeBizId=null,editingBizId=null;
+
+/* ── SUPABASE PHASE 3 INTEGRATION ─────────────── */
+var SUPABASE_URL='https://eplsmeenlwbglgtnzxau.supabase.co';
+var SUPABASE_ANON='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVwbHNtZWVubHdiZ2xndG56eGF1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQyNDM3MTYsImV4cCI6MjA5OTgxOTcxNn0.ry8pf_93UetpE_TgTig438hayZwx-GOM2QxHgwjTqGg';
+var sb=null;var sbUser=null;var sbReady=false;
+
+function sbInit(){
+  if(typeof supabase==='undefined'){console.warn('Supabase library not loaded');return false;}
+  sb=supabase.createClient(SUPABASE_URL,SUPABASE_ANON,{auth:{persistSession:true,autoRefreshToken:true,storageKey:'sb-kc-auth'}});
+  sb.auth.onAuthStateChange(function(evt,session){
+    if(evt==='SIGNED_IN'&&session&&session.user){sbUser=session.user;updateLoginUI(true);sbSyncAll();}
+    if(evt==='SIGNED_OUT'){sbUser=null;updateLoginUI(false);}
+  });
+  return true;
+}
+
+function sbIsOnline(){return navigator.onLine;}
+
+/* ── AUTH ────────────────────────────────────── */
+async function sbCheckSession(){
+  if(!sb&&sbInit()){}
+  if(!sb)return false;
+  var r=await sb.auth.getSession();
+  if(r.data&&r.data.session){sbUser=r.data.session.user;updateLoginUI(true);return true;}
+  updateLoginUI(false);return false;
+}
+
+/* UI wrappers — read the SYNC panel inputs and give visible feedback.
+   (Replaces inline handlers that were corrupted to `quot;` and threw
+   silently on click.) */
+function sbSignInFromUI(){
+  var em=(document.getElementById('sb-email')||{}).value||'';
+  var pw=(document.getElementById('sb-password')||{}).value||'';
+  em=em.trim();
+  if(!em||!pw){showErr('Enter your email and password, then press SIGN IN.');return;}
+  showErr('Signing in…','var(--gold)');
+  sbSignIn(em,pw).then(function(ok){if(ok)showErr('Signed in — syncing your data.','var(--gold)');});
+}
+function sbMagicLinkFromUI(){
+  var em=(document.getElementById('sb-email')||{}).value||'';
+  em=em.trim();
+  if(!em){showErr('Enter your email first, then press MAGIC LINK.');return;}
+  sbSendMagicLink(em);
+}
+async function sbSignIn(email,password){
+  if(!sb&&sbInit()){}
+  if(!sb){showErr('Supabase not available');return false;}
+  var r=await sb.auth.signInWithPassword({email:email,password:password});
+  if(r.error){showErr('Sign-in failed: '+r.error.message);return false;}
+  sbUser=r.data.user;updateLoginUI(true);await sbSyncAll();return true;
+}
+
+async function sbSendMagicLink(email){
+  if(!sb&&sbInit()){}
+  if(!sb)return false;
+  // Always send the magic link back to the canonical live app, never to a
+  // local/preview page (restores the July fix — without this the link
+  // redirects to Supabase's default Site URL and sign-in never completes).
+  var redirectTo=/github\.io$/.test(location.hostname)?location.href.split('#')[0].split('?')[0]:'https://kelechidozie-claude.github.io/kunoch-command/';
+  var r=await sb.auth.signInWithOtp({email:email,options:{emailRedirectTo:redirectTo}});
+  if(r.error){showErr('Magic link failed: '+r.error.message);return false;}
+  showErr('Magic link sent — check your email (link opens the live app)','var(--gold)');return true;
+}
+
+async function sbSignOut(){
+  if(!sb)return;
+  await sb.auth.signOut();sbUser=null;updateLoginUI(false);
+}
+
+/* ── SYNC: BUSINESSES ────────────────────────── */
+async function sbSyncBusinesses(){
+  if(!sb||!sbUser||!sbIsOnline())return false;
+  for(var i=0;i<businesses.length;i++){
+    var b=businesses[i];
+    await sb.from('businesses').upsert({user_id:sbUser.id,biz_id:b.id,data:b,sort:i,updated_at:new Date().toISOString()},{onConflict:'user_id,biz_id'});
+  }
+  var r=await sb.from('businesses').select('biz_id,data,sort').order('sort',{ascending:true});
+  if(r.error){console.warn('sbSyncBusinesses pull error',r.error);return false;}
+  if(r.data&&r.data.length){
+    var merged=r.data.map(function(row){return row.data;});
+    var sbIds={};r.data.forEach(function(row){sbIds[row.biz_id]=true;});
+    businesses.forEach(function(b){if(!sbIds[b.id])merged.push(b);});
+    businesses=merged;localStorage.setItem('kc_businesses',JSON.stringify(businesses));renderBizUI();
+  }
+  return true;
+}
+
+/* ── SYNC: RUNS ──────────────────────────────── */
+async function sbSyncRuns(){
+  if(!sb||!sbUser||!sbIsOnline())return false;
+  var localHist=JSON.parse(localStorage.getItem('kc_history_v3')||'{}');
+  for(var bizId in localHist){
+    var runs=localHist[bizId]||[];
+    for(var j=0;j<runs.length;j++){
+      var run=runs[j];
+      await sb.from('runs').upsert({user_id:sbUser.id,run_id:run.id,biz_id:bizId,data:run,updated_at:new Date().toISOString()},{onConflict:'user_id,run_id'});
+    }
+  }
+  var r=await sb.from('runs').select('biz_id,data').order('created_at',{ascending:false});
+  if(r.error){console.warn('sbSyncRuns pull error',r.error);return false;}
+  if(r.data){
+    var merged={};
+    r.data.forEach(function(row){
+      if(!merged[row.biz_id])merged[row.biz_id]=[];
+      merged[row.biz_id].push(row.data);
+    });
+    for(var bizId in localHist){
+      if(!merged[bizId])merged[bizId]=[];
+      var localIds={};merged[bizId].forEach(function(r){localIds[r.id]=true;});
+      localHist[bizId].forEach(function(run){if(!localIds[run.id])merged[bizId].push(run);});
+    }
+    localStorage.setItem('kc_history_v3',JSON.stringify(merged));
+  }
+  return true;
+}
+
+/* ── SYNC: COSTS ─────────────────────────────── */
+async function sbSyncCosts(){
+  if(!sb||!sbUser||!sbIsOnline())return false;
+  var costs=JSON.parse(localStorage.getItem('kc_costs')||'{}');
+  for(var key in costs){
+    await sb.from('monthly_costs').upsert({year_month:key,amount:costs[key],details:[]},{onConflict:'user_id,year_month'});
+  }
+  var r=await sb.from('monthly_costs').select('year_month,amount');
+  if(r.data){
+    var merged={};
+    r.data.forEach(function(row){merged[row.year_month]=row.amount;});
+    localStorage.setItem('kc_costs',JSON.stringify(merged));
+  }
+  return true;
+}
+
+/* ── SYNC: SETTINGS ──────────────────────────── */
+async function sbSyncSettings(){
+  if(!sb||!sbUser||!sbIsOnline())return false;
+  var draft=localStorage.getItem('kc_draft')||'';
+  var active=localStorage.getItem('kc_active_biz')||'';
+  await sb.from('app_settings').upsert({user_id:sbUser.id,active_business_id:active,draft_task:draft,updated_at:new Date().toISOString()},{onConflict:'user_id'});
+  var r=await sb.from('app_settings').select('active_business_id,draft_task').eq('user_id',sbUser.id).single();
+  if(r.data){
+    if(r.data.active_business_id){activeBizId=r.data.active_business_id;localStorage.setItem('kc_active_biz',activeBizId);}
+    if(r.data.draft_task){localStorage.setItem('kc_draft',r.data.draft_task);var ta=document.getElementById('task');if(ta)ta.value=r.data.draft_task;}
+  }
+  return true;
+}
+
+/* ── FULL SYNC ───────────────────────────────── */
+async function sbSyncAll(){
+  if(!sbReady||!sbUser||!sbIsOnline()){console.log('Sync skipped: not ready');return;}
+  var dot=document.getElementById('sync-dot');if(dot)dot.classList.add('spinning');
+  try{
+    await sbSyncBusinesses();await sbSyncRuns();await sbSyncCosts();await sbSyncSettings();
+    loadHistory();updateCostDisplay();console.log('Supabase sync complete');
+  }catch(e){console.warn('Sync error',e);}
+  if(dot)dot.classList.remove('spinning');
+}
+
+/* ── LOGIN UI ────────────────────────────────── */
+function updateLoginUI(isLoggedIn){
+  var el=document.getElementById('login-panel');
+  if(!el)return;
+  if(isLoggedIn){
+    el.innerHTML='<div style="padding:10px 14px"><div style="font-size:10px;letter-spacing:2px;color:var(--gold);margin-bottom:6px">SYNC ACTIVE</div><div style="font-size:11px;color:var(--text-dim)">'+(sbUser&&sbUser.email?sbUser.email:'')+'</div><button onclick="sbSignOut()" style="margin-top:8px" class="bk-btn">SIGN OUT</button></div>';
+    sbReady=true;
+  }else{
+    el.innerHTML='<div style="padding:10px 14px"><div style="font-size:10px;letter-spacing:2px;color:var(--gold);margin-bottom:6px">SIGN IN TO SYNC</div><input type="email" id="sb-email" placeholder="Email" style="width:100%;margin-bottom:6px;background:#0E1018;border:1px solid var(--border);color:var(--text);padding:6px 8px;font-size:11px;border-radius:4px"><input type="password" id="sb-password" placeholder="Password" style="width:100%;margin-bottom:6px;background:#0E1018;border:1px solid var(--border);color:var(--text);padding:6px 8px;font-size:11px;border-radius:4px"><button onclick="sbSignInFromUI()" style="width:100%;margin-bottom:4px" class="bk-btn">SIGN IN</button><button onclick="sbMagicLinkFromUI()" style="width:100%" class="bk-btn">MAGIC LINK</button></div>';
+    sbReady=false;
+  }
+}
+
+/* ── INIT ON LOAD ────────────────────────────── */
+window.addEventListener('load',function(){
+  sbInjectUI();
+  if(sbInit()){
+    sbCheckSession().then(function(ok){if(ok)sbSyncAll();});
+  }
+});
+window.addEventListener('online',function(){if(sbReady)sbSyncAll();});
+
+/* ── UI INJECTION ────────────────────────────── */
+function sbInjectUI(){
+  var footer=document.getElementById('sb-footer');
+  if(footer&&!document.getElementById('sync-row')){
+    var syncRow=document.createElement('div');
+    syncRow.id='sync-row';
+    syncRow.style.cssText='display:flex;align-items:center;gap:6px;padding:6px 10px;border-top:1px solid var(--border)';
+    syncRow.innerHTML='<div id="sync-dot" style="width:6px;height:6px;border-radius:50%;background:var(--text-muted);flex-shrink:0"></div><div style="font-size:9px;letter-spacing:1px;color:var(--text-muted);flex:1">SYNC</div>';
+    footer.appendChild(syncRow);
+    var loginPanel=document.createElement('div');
+    loginPanel.id='login-panel';
+    loginPanel.style.cssText='border-top:1px solid var(--border)';
+    footer.appendChild(loginPanel);
+  }
+  if(!document.getElementById('sb-spin-style')){
+    var style=document.createElement('style');
+    style.id='sb-spin-style';
+    style.textContent='#sync-dot.spinning{animation:sb-spin 1s linear infinite;background:var(--gold)!important}@keyframes sb-spin{to{transform:rotate(360deg)}}';
+    document.head.appendChild(style);
+  }
+}
+
+function loadBusinesses(){
+  var raw=localStorage.getItem('kc_businesses');
+  if(raw){
+    try{businesses=JSON.parse(raw);}catch(e){businesses=DEFAULT_BUSINESSES.slice();saveBusinessesToStorage();}
+  }else{
+    businesses=DEFAULT_BUSINESSES.slice();saveBusinessesToStorage();
+  }
+  // One-time migration: Hertunba → Onalaja (id + profile), preserving history/meetings
+  try{
+    var hbIdx=businesses.findIndex(function(b){return b.id==='hertunba';});
+    if(hbIdx>=0&&!businesses.some(function(b){return b.id==='onalaja';})){
+      var onj=DEFAULT_BUSINESSES.find(function(b){return b.id==='onalaja';});
+      if(onj)businesses[hbIdx]=JSON.parse(JSON.stringify(onj));
+      saveBusinessesToStorage();
+      var hist=JSON.parse(localStorage.getItem('kc_history_v3')||'{}');
+      if(hist['hertunba']){hist['onalaja']=(hist['onalaja']||[]).concat(hist['hertunba']);delete hist['hertunba'];localStorage.setItem('kc_history_v3',JSON.stringify(hist));}
+      var mkey=localStorage.getItem('kc_meetings_hertunba');
+      if(mkey){localStorage.setItem('kc_meetings_onalaja',mkey);localStorage.removeItem('kc_meetings_hertunba');}
+      if(localStorage.getItem('kc_active_biz')==='hertunba')localStorage.setItem('kc_active_biz','onalaja');
+    }
+  }catch(e){}
+  activeBizId=localStorage.getItem('kc_active_biz')||businesses[0].id;
+  if(!businesses.find(function(b){return b.id===activeBizId;}))activeBizId=businesses[0].id;
+}
+function saveBusinessesToStorage(){localStorage.setItem('kc_businesses',JSON.stringify(businesses));}
+function saveActiveBiz(){localStorage.setItem('kc_active_biz',activeBizId);}
+function getActiveBiz(){return businesses.find(function(b){return b.id===activeBizId;});}
+
+function renderBizUI(){
+  if(dirScope==='cross'){try{renderCrossChips();}catch(e){}}
+  var biz=getActiveBiz();
+  if(!biz)return;
+  document.getElementById('biz-btn-name').textContent=biz.name.toUpperCase();
+  document.getElementById('biz-ctx-name').textContent=biz.name.toUpperCase();
+  var list=document.getElementById('biz-menu-list');
+  list.innerHTML='';
+  businesses.forEach(function(b){
+    var el=document.createElement('div');
+    el.className='biz-item'+(b.id===activeBizId?' active':'');
+    var stage=b.stage?b.stage.toUpperCase():'—';
+    el.innerHTML='<span>'+escHtml(b.name)+'</span><span class="biz-item-stage">'+stage+'</span>';
+    el.onclick=function(){switchBusiness(b.id);};
+    list.appendChild(el);
+  });
+}
+
+function switchBusiness(id){
+  activeBizId=id;saveActiveBiz();renderBizUI();loadHistory();updateRunBtn();closeBizMenu();
+}
+
+function toggleBizMenu(e){
+  if(e)e.stopPropagation();
+  var m=document.getElementById('biz-menu'),b=document.getElementById('biz-btn');
+  m.classList.toggle('open');b.classList.toggle('open');
+}
+function closeBizMenu(){
+  document.getElementById('biz-menu').classList.remove('open');
+  document.getElementById('biz-btn').classList.remove('open');
+}
+document.addEventListener('click',function(e){
+  var sw=document.getElementById('biz-switcher');
+  if(sw&&!sw.contains(e.target))closeBizMenu();
+});
+
+function openBizModal(target){
+  closeBizMenu();
+  var biz=null;
+  if(target==='current'){biz=getActiveBiz();editingBizId=biz.id;}
+  else if(target&&typeof target==='object'){biz=target;editingBizId=biz.id;}
+  else{biz=null;editingBizId=null;}
+
+  document.getElementById('modal-title').textContent=biz?('Edit — '+biz.name):'New Business';
+  document.getElementById('modal-delete').disabled=!biz||businesses.length<=1;
+
+  var fields=['name','legal','juris','positioning','stage','revenue','currency','model','customer','people','p1','p2','p3','constraints','competitors','challenges','c1','c2','c3','font_h','font_b','tone','values','dos','donts'];
+  var mapping={name:'name',legal:'legal_entity',juris:'jurisdictions',positioning:'positioning',stage:'stage',revenue:'revenue',currency:'currency',model:'business_model',customer:'target_customer',people:'key_people',p1:'p1',p2:'p2',p3:'p3',constraints:'constraints',competitors:'competitors',challenges:'challenges',c1:'c1',c2:'c2',c3:'c3',font_h:'font_h',font_b:'font_b',tone:'tone',values:'values',dos:'dos',donts:'donts'};
+  fields.forEach(function(f){
+    var el=document.getElementById('f-'+f);if(!el)return;
+    el.value=biz?(biz[mapping[f]]||''):(f==='currency'?'USD':(f==='c1'?'#C9A84C':(f==='c2'?'#1A1D2B':(f==='c3'?'#34D399':''))));
+  });
+  // sync color pickers
+  ['c1','c2','c3'].forEach(function(c){
+    var picker=document.getElementById('f-'+c+'-picker');
+    var txt=document.getElementById('f-'+c);
+    picker.value=txt.value||'#C9A84C';
+  });
+  var autoReviewEl=document.getElementById('f-auto-review');
+  if(autoReviewEl)autoReviewEl.checked=biz?!!biz.auto_review:false;
+  var arEmailEl=document.getElementById('f-autoreview-email');
+  if(arEmailEl)arEmailEl.checked=biz?!!biz.auto_review_email:false;
+  switchTab('profile');
+  document.getElementById('modal-backdrop').classList.add('open');
+}
+
+function closeBizModal(){document.getElementById('modal-backdrop').classList.remove('open');editingBizId=null;window._importData=null;var tabs=document.getElementById('modal-tabs');if(tabs)tabs.style.display='flex';}
+
+function switchTab(tab){
+  document.querySelectorAll('.mtab').forEach(function(t){t.classList.toggle('active',t.dataset.tab===tab);});
+  document.querySelectorAll('.mpane').forEach(function(p){p.classList.toggle('active',p.id==='pane-'+tab);});
+}
+
+function saveBusiness(){
+  var name=document.getElementById('f-name').value.trim();
+  if(!name){alert('Business name is required');return;}
+  var data={
+    name:name,
+    legal_entity:document.getElementById('f-legal').value.trim(),
+    jurisdictions:document.getElementById('f-juris').value.trim(),
+    positioning:document.getElementById('f-positioning').value.trim(),
+    stage:document.getElementById('f-stage').value,
+    revenue:document.getElementById('f-revenue').value.trim(),
+    currency:document.getElementById('f-currency').value,
+    business_model:document.getElementById('f-model').value.trim(),
+    target_customer:document.getElementById('f-customer').value.trim(),
+    key_people:document.getElementById('f-people').value.trim(),
+    p1:document.getElementById('f-p1').value.trim(),
+    p2:document.getElementById('f-p2').value.trim(),
+    p3:document.getElementById('f-p3').value.trim(),
+    constraints:document.getElementById('f-constraints').value.trim(),
+    competitors:document.getElementById('f-competitors').value.trim(),
+    challenges:document.getElementById('f-challenges').value.trim(),
+    c1:document.getElementById('f-c1').value.trim(),
+    c2:document.getElementById('f-c2').value.trim(),
+    c3:document.getElementById('f-c3').value.trim(),
+    font_h:document.getElementById('f-font-h').value.trim(),
+    font_b:document.getElementById('f-font-b').value.trim(),
+    tone:document.getElementById('f-tone').value.trim(),
+    values:document.getElementById('f-values').value.trim(),
+    dos:document.getElementById('f-dos').value.trim(),
+    donts:document.getElementById('f-donts').value.trim(),
+    auto_review:document.getElementById('f-auto-review').checked,
+    auto_review_email:(document.getElementById('f-autoreview-email')||{checked:false}).checked
+  };
+  if(editingBizId){
+    var idx=businesses.findIndex(function(b){return b.id===editingBizId;});
+    if(idx>=0){data.id=editingBizId;businesses[idx]=data;}
+  }else{
+    data.id='biz_'+Date.now().toString(36);
+    businesses.push(data);
+    activeBizId=data.id;saveActiveBiz();
+  }
+  saveBusinessesToStorage();
+  renderBizUI();loadHistory();closeBizModal();
+}
+
+function deleteBusiness(){
+  if(!editingBizId||businesses.length<=1)return;
+  var biz=businesses.find(function(b){return b.id===editingBizId;});
+  if(!biz)return;
+  if(!confirm('Delete "'+biz.name+'" permanently? This removes its profile and history.'))return;
+  businesses=businesses.filter(function(b){return b.id!==editingBizId;});
+  // purge history for this business
+  var hist=JSON.parse(localStorage.getItem('kc_history_v3')||'{}');
+  delete hist[editingBizId];
+  localStorage.setItem('kc_history_v3',JSON.stringify(hist));
+  if(activeBizId===editingBizId){activeBizId=businesses[0].id;saveActiveBiz();}
+  saveBusinessesToStorage();renderBizUI();loadHistory();closeBizModal();
+}
+
+/* color picker / text sync */
+document.addEventListener('input',function(e){
+  if(!e.target.id)return;
+  var id=e.target.id;
+  var m=id.match(/^f-(c[123])(-picker)?$/);
+  if(!m)return;
+  var key=m[1];
+  var picker=document.getElementById('f-'+key+'-picker');
+  var txt=document.getElementById('f-'+key);
+  if(id.endsWith('-picker')){txt.value=picker.value.toUpperCase();}
+  else{
+    var v=txt.value.trim();
+    if(/^#[0-9A-Fa-f]{6}$/.test(v))picker.value=v;
+  }
+});
+
+/* ── BUSINESS CONTEXT INJECTION ───────────────── */
+function formatBizContext(biz){var ctx='';var hist=JSON.parse(localStorage.getItem('kc_history_v3')||'{}');var bizHist=hist[biz.id]||[];if(bizHist.length>0){var recent=bizHist.slice(0,3);ctx='\n\nRECENT DIRECTIVES FOR THIS BUSINESS (memory):\n'+recent.map(function(h,i){return(i+1)+'. '+h.date+' '+h.time+': '+h.task+'\nSummary: '+(h.summary||'N/A');}).join('\n');}
+  if(!biz)return '';
+  var L=[];
+  L.push('═══════════════════════════════════════');
+  L.push('ACTIVE BUSINESS CONTEXT — '+biz.name.toUpperCase());
+  L.push('═══════════════════════════════════════');
+  if(biz.legal_entity)L.push('Legal entity: '+biz.legal_entity);
+  if(biz.jurisdictions)L.push('Jurisdiction(s): '+biz.jurisdictions);
+  if(biz.positioning)L.push('Positioning: '+biz.positioning);
+  if(biz.stage)L.push('Stage: '+biz.stage);
+  if(biz.revenue)L.push('Revenue band: '+biz.revenue+' '+(biz.currency||''));
+  if(biz.business_model)L.push('Business model: '+biz.business_model);
+  if(biz.target_customer)L.push('Target customer: '+biz.target_customer);
+  if(biz.key_people)L.push('Key people: '+biz.key_people);
+  var prios=[biz.p1,biz.p2,biz.p3].filter(function(p){return p;});
+  if(prios.length)L.push('Active priorities: '+prios.map(function(p,i){return '('+(i+1)+') '+p;}).join('; '));
+  if(biz.constraints)L.push('Non-negotiables: '+biz.constraints);
+  if(biz.competitors)L.push('Competitive landscape: '+biz.competitors);
+  if(biz.challenges)L.push('Current challenges: '+biz.challenges);
+  // Brand block
+  var brandBits=[];
+  if(biz.c1||biz.c2||biz.c3){
+    var cs=[biz.c1,biz.c2,biz.c3].filter(function(c){return c;});
+    if(cs.length)brandBits.push('Colours: '+cs.join(' / '));
+  }
+  if(biz.font_h||biz.font_b){
+    var fs=[];if(biz.font_h)fs.push('heading '+biz.font_h);if(biz.font_b)fs.push('body '+biz.font_b);
+    brandBits.push('Fonts: '+fs.join(', '));
+  }
+  if(biz.tone)brandBits.push('Tone: '+biz.tone);
+  if(biz.values)brandBits.push('Values: '+biz.values);
+  if(biz.dos)brandBits.push("Do's: "+biz.dos);
+  if(biz.donts)brandBits.push("Don'ts: "+biz.donts);
+  if(brandBits.length){L.push('─── BRAND ───');brandBits.forEach(function(b){L.push(b);});}
+  L.push('═══════════════════════════════════════');
+  return L.join('\n');
+}
+
+
+var running=false,lastTask='',lastOutputs={},lastBriefs={},lastSummary='',lastSynthesis='',lastAgents=[];
+var uploadedDocs=[],processingCount=0,currentPlan=null,selMode='auto';
+
+/* ── DATE ──────────────────────────────────────── */
+document.getElementById('tb-r').textContent=new Date().toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'}).toUpperCase();
+
+/* ── MODE TOGGLE ───────────────────────────────── */
+function setMode(m){
+  selMode=m;
+  document.getElementById('mode-auto').classList.toggle('active',m==='auto');
+  document.getElementById('mode-manual').classList.toggle('active',m==='manual');
+  document.getElementById('manual-note').style.display=m==='manual'?'block':'none';
+  var ids=['cfo','legal','ma','ppp','board','tech','research'];
+  ids.forEach(function(id){
+    var chk=document.getElementById('chk-'+id);
+    if(chk)chk.disabled=m==='auto';
+  });
+}
+setMode('auto'); // init
+
+function getManualSelection(){
+  var ids=['cfo','legal','ma','ppp','board','tech','research'];
+  return ids.filter(function(id){var c=document.getElementById('chk-'+id);return c&&c.checked;});
+}
+
+/* ── FILE TYPES ──────────────────────────────────── */
+var FT={
+  pdf:{label:'PDF',c:'#F87171',bg:'rgba(248,113,113,0.12)'},
+  docx:{label:'WORD',c:'#60A5FA',bg:'rgba(96,165,250,0.12)'},doc:{label:'WORD',c:'#60A5FA',bg:'rgba(96,165,250,0.12)'},
+  xlsx:{label:'XLS',c:'#34D399',bg:'rgba(52,211,153,0.12)'},xls:{label:'XLS',c:'#34D399',bg:'rgba(52,211,153,0.12)'},
+  csv:{label:'CSV',c:'#34D399',bg:'rgba(52,211,153,0.12)'},
+  pptx:{label:'PPT',c:'#FB923C',bg:'rgba(251,146,60,0.12)'},
+  txt:{label:'TXT',c:'#94A3B8',bg:'rgba(148,163,184,0.12)'},md:{label:'MD',c:'#A78BFA',bg:'rgba(167,139,250,0.12)'},
+  jpg:{label:'IMG',c:'#F472B6',bg:'rgba(244,114,182,0.12)'},jpeg:{label:'IMG',c:'#F472B6',bg:'rgba(244,114,182,0.12)'},
+  png:{label:'IMG',c:'#F472B6',bg:'rgba(244,114,182,0.12)'},gif:{label:'IMG',c:'#F472B6',bg:'rgba(244,114,182,0.12)'},webp:{label:'IMG',c:'#F472B6',bg:'rgba(244,114,182,0.12)'}
+};
+var ALLOWED=Object.keys(FT);
+
+/* ── UPLOAD ──────────────────────────────────────── */
+function dzOver(e){e.preventDefault();document.getElementById('dropzone').classList.add('drag');}
+function dzLeave(){document.getElementById('dropzone').classList.remove('drag');}
+function dzDrop(e){e.preventDefault();document.getElementById('dropzone').classList.remove('drag');handleFiles(e.dataTransfer.files);}
+function filesChosen(files){handleFiles(files);}
+
+function handleFiles(files){
+  Array.from(files).forEach(function(f){
+    var ext=f.name.split('.').pop().toLowerCase();
+    if(!ALLOWED.includes(ext)){alert(f.name+'\nUnsupported. Use: PDF, Word, Excel, PowerPoint, CSV, TXT, MD, JPG, PNG');return;}
+    if(f.size>20*1024*1024){alert(f.name+'\nFile too large (max 20MB).');return;}
+    if(uploadedDocs.find(function(d){return d.name===f.name;}))return;
+    var doc={name:f.name,ext:ext,size:f.size,ready:false,contentBlocks:[]};
+    uploadedDocs.push(doc);renderPills();processingCount++;showProc();processFile(f,doc);
+  });
+}
+
+function processFile(file,doc){
+  var ext=doc.ext;
+  if(ext==='pdf'){
+    readB64(file).then(function(b){doc.contentBlocks=[{type:'document',source:{type:'base64',media_type:'application/pdf',data:b}}];fileReady(doc);});
+  }else if(['jpg','jpeg','png','gif','webp'].includes(ext)){
+    var mm={jpg:'image/jpeg',jpeg:'image/jpeg',png:'image/png',gif:'image/gif',webp:'image/webp'};
+    readB64(file).then(function(b){doc.contentBlocks=[{type:'image',source:{type:'base64',media_type:mm[ext],data:b}}];fileReady(doc);});
+  }else if(['xlsx','xls'].includes(ext)){
+    readAB(file).then(function(ab){
+      try{
+        var wb=XLSX.read(ab,{type:'arraybuffer'}),txt='[EXCEL: '+doc.name+']\n\n';
+        wb.SheetNames.forEach(function(sn){
+          var ws=wb.Sheets[sn],range=XLSX.utils.decode_range(ws['!ref']||'A1:A1');
+          var rc=range.e.r-range.s.r+1;
+          if(rc>500){
+            var nr=XLSX.utils.encode_range({s:range.s,e:{r:range.s.r+500,c:range.e.c}}),wl={};
+            Object.keys(ws).forEach(function(k){if(k==='!ref'){wl[k]=nr;return;}var c=XLSX.utils.decode_cell(k);if(!isNaN(c.r)&&c.r<=range.s.r+500)wl[k]=ws[k];});
+            txt+='Sheet: '+sn+' (first 500 of '+rc+' rows)\n'+XLSX.utils.sheet_to_csv(wl)+'\n\n';
+          }else{txt+='Sheet: '+sn+' ('+rc+' rows)\n'+XLSX.utils.sheet_to_csv(ws)+'\n\n';}
+        });
+        doc.contentBlocks=[{type:'text',text:txt}];fileReady(doc);
+      }catch(e){doc.contentBlocks=[{type:'text',text:'[Excel error: '+e.message+']'}];fileReady(doc);}
+    });
+  }else if(['docx','doc'].includes(ext)){
+    readAB(file).then(function(ab){mammoth.extractRawText({arrayBuffer:ab}).then(function(r){doc.contentBlocks=[{type:'text',text:'[WORD: '+doc.name+']\n\n'+r.value}];fileReady(doc);}).catch(function(e){doc.contentBlocks=[{type:'text',text:'[Word error: '+e.message+']'}];fileReady(doc);});});
+  }else if(ext==='pptx'){
+    readAB(file).then(function(ab){
+      var u=new Uint8Array(ab),raw='';
+      for(var i=0;i<Math.min(u.length,3e6);i++)raw+=String.fromCharCode(u[i]);
+      var m=raw.match(/<a:t[^>]*>([^<]+)<\/a:t>/g)||[];
+      doc.contentBlocks=[{type:'text',text:'[POWERPOINT: '+doc.name+']\n\n'+m.map(function(x){return x.replace(/<[^>]+>/g,'');}).filter(function(s){return s.trim().length>0;}).join('\n')}];
+      fileReady(doc);
+    });
+  }else{
+    readTxt(file).then(function(t){doc.contentBlocks=[{type:'text',text:'['+ext.toUpperCase()+': '+doc.name+']\n\n'+t}];fileReady(doc);});
+  }
+}
+function fileReady(d){d.ready=true;processingCount=Math.max(0,processingCount-1);if(!processingCount)document.getElementById('proc-note').style.display='none';renderPills();}
+function showProc(){document.getElementById('proc-note').style.display='block';}
+
+function renderPills(){
+  var fp=document.getElementById('file-pills');
+  if(!uploadedDocs.length){fp.style.display='none';return;}
+  fp.style.display='flex';fp.innerHTML='';
+  uploadedDocs.forEach(function(doc,i){
+    var ft=FT[doc.ext]||{label:doc.ext.toUpperCase(),c:'#94A3B8',bg:'rgba(148,163,184,0.1)'};
+    var el=document.createElement('div');el.className='fpill'+(doc.ready?' ready':'');
+    el.innerHTML='<span class="fpill-badge" style="color:'+ft.c+';background:'+ft.bg+'">'+ft.label+'</span>'
+      +'<span class="fpill-name">'+escHtml(doc.name)+'</span>'
+      +'<span>'+(doc.ready?'<span style="color:var(--cfo);font-size:10px">✓</span>':'<span class="spin" style="color:var(--gold);font-size:10px">◌</span>')+'</span>'
+      +'<button class="fpill-rm" onclick="removeDoc('+i+')">×</button>';
+    fp.appendChild(el);
+  });
+}
+function removeDoc(i){uploadedDocs.splice(i,1);renderPills();}
+
+/* ── DIRECTIVE SCOPE / CROSS-BUSINESS (Phase 6) ── */
+var dirScope='single',crossSel=[],runIsCross=false,runScopeIds=null;
+function setScope(s){
+  dirScope=s;
+  document.getElementById('scope-single').classList.toggle('active',s==='single');
+  document.getElementById('scope-cross').classList.toggle('active',s==='cross');
+  document.getElementById('cross-pick').style.display=(s==='cross')?'block':'none';
+  if(s==='cross')renderCrossChips();
+  updateScopeNote();updateRunBtn();
+}
+function renderCrossChips(){
+  var wrap=document.getElementById('cross-chips');if(!wrap)return;
+  crossSel=crossSel.filter(function(id){return businesses.some(function(b){return b.id===id;});});
+  wrap.innerHTML='';
+  businesses.forEach(function(b){
+    var on=crossSel.indexOf(b.id)>=0;
+    var el=document.createElement('div');
+    el.className='cross-chip'+(on?' on':'');
+    el.textContent=b.name;
+    el.onclick=function(){toggleCrossChip(b.id);};
+    wrap.appendChild(el);
+  });
+}
+function toggleCrossChip(id){
+  var i=crossSel.indexOf(id);
+  if(i>=0)crossSel.splice(i,1);else crossSel.push(id);
+  renderCrossChips();updateScopeNote();updateRunBtn();
+}
+function getCrossSelection(){return crossSel.filter(function(id){return businesses.some(function(b){return b.id===id;});});}
+function updateScopeNote(){
+  var note=document.getElementById('biz-ctx-note');if(!note)return;
+  if(dirScope==='cross'){
+    var n=getCrossSelection().length;
+    note.innerHTML=(n<2?'SELECT AT LEAST 2 BUSINESSES':'DIRECTIVE WILL SPAN <span id="biz-ctx-name">'+n+' BUSINESSES</span>');
+  }else{
+    var b=getActiveBiz();
+    note.innerHTML='DIRECTIVE WILL BE SCOPED TO <span id="biz-ctx-name">'+((b&&b.name)?escHtml(b.name.toUpperCase()):'—')+'</span>';
+  }
+}
+function setCrossBanner(names){
+  var el=document.getElementById('cross-banner');if(!el)return;
+  if(names&&names.length){el.textContent='◆ CROSS-BUSINESS · '+names.join(' · ').toUpperCase();el.style.display='block';}
+  else{el.style.display='none';el.textContent='';}
+}
+function formatMultiBizContext(list){
+  var L=['╔══ CROSS-BUSINESS PORTFOLIO DIRECTIVE · '+list.length+' BUSINESSES ══╗',
+    'Analyse ACROSS these businesses: synergies to exploit, conflicts and resource contention to resolve, sequencing, and portfolio-level trade-offs. Attribute every point to the specific business(es) it concerns.',''];
+  list.forEach(function(b){L.push(formatBizContext(b));L.push('');});
+  L.push('╚══ END PORTFOLIO ('+list.map(function(b){return b.name;}).join(' · ')+') ══╝');
+  return L.join('\n')+'\n\n';
+}
+function activeCtx(){
+  if(runIsCross&&runScopeIds&&runScopeIds.length){
+    var list=runScopeIds.map(function(id){return businesses.find(function(b){return b.id===id;});}).filter(Boolean);
+    if(list.length)return formatMultiBizContext(list);
+  }
+  var b=getActiveBiz();
+  return b?formatBizContext(b)+'\n\n':'';
+}
+
+function buildContent(prompt){
+  var fullPrompt=activeCtx()+prompt;
+  if(!uploadedDocs.length||!uploadedDocs.every(function(d){return d.ready;}))return fullPrompt;
+  var parts=[];
+  uploadedDocs.forEach(function(d){d.contentBlocks.forEach(function(b){parts.push(b);});});
+  parts.push({type:'text',text:fullPrompt});
+  return parts;
+}
+
+function readB64(f){return new Promise(function(r,j){var rd=new FileReader();rd.onload=function(e){r(e.target.result.split(',')[1]);};rd.onerror=j;rd.readAsDataURL(f);});}
+function readAB(f){return new Promise(function(r,j){var rd=new FileReader();rd.onload=function(e){r(e.target.result);};rd.onerror=j;rd.readAsArrayBuffer(f);});}
+function readTxt(f){return new Promise(function(r,j){var rd=new FileReader();rd.onload=function(e){r(e.target.result);};rd.onerror=j;rd.readAsText(f);});}
+
+/* ── INIT (API key + businesses + history) ───── */
+/* ── THEME (dark default; light optional, per-device) ── */
+function applyTheme(t){
+  document.documentElement.classList.toggle('theme-light',t==='light');
+  var b=document.getElementById('theme-btn');
+  if(b)b.textContent=(t==='light')?'◐ DARK':'◐ LIGHT';
+}
+function toggleTheme(){
+  var cur=(localStorage.getItem('kc_theme')==='light')?'light':'dark';
+  var next=(cur==='light')?'dark':'light';
+  try{localStorage.setItem('kc_theme',next);}catch(e){}
+  applyTheme(next);
+}
+
+window.onload=function(){
+  // Surface Supabase auth errors delivered in the URL hash (expired/used magic links)
+  if(location.hash&&location.hash.indexOf('error_code=')>=0){
+    var hp=new URLSearchParams(location.hash.slice(1));
+    var code=hp.get('error_code'),desc=(hp.get('error_description')||'').replace(/\+/g,' ');
+    if(code==='otp_expired')showErr('That magic link has expired or was already used — links are single-use. Request a fresh one (only the NEWEST email works), or sign in with your password.');
+    else showErr('Sign-in link error: '+(desc||code));
+    try{history.replaceState(null,'',location.pathname+location.search);}catch(e){}
+  }
+  applyTheme(localStorage.getItem('kc_theme')==='light'?'light':'dark');
+  var s=null;
+  try{s=localStorage.getItem('kc_api_key');}catch(e){}
+  if(s){document.getElementById('apikey').value=s;setApiOk(true);}
+  else{document.getElementById('api-panel').classList.add('open');}
+  loadBusinesses();
+  renderBizUI();
+  loadHistory();
+  updateRunBtn();
+  if('serviceWorker' in navigator){try{navigator.serviceWorker.register('./sw.js');}catch(e){}}
+};
+function toggleApi(){document.getElementById('api-panel').classList.toggle('open');updateCostDisplay();}
+function setApiOk(ok){
+  document.getElementById('api-dot').className=ok?'ok':'';
+  document.getElementById('api-lbl').textContent=ok?'API KEY ACTIVE':'API KEY NOT SET';
+  if(ok){document.getElementById('api-ok').style.display='block';document.getElementById('api-panel').classList.remove('open');}
+}
+function saveKey(){
+  var k=document.getElementById('apikey').value.trim();
+  if(!k){showErr('Paste your API key first (starts with sk-ant-).');return;}
+  try{localStorage.setItem('kc_api_key',k);}catch(e){/* file:// storage may be blocked; key still works in-session via input field */}
+  setApiOk(true);
+}
+function getKey(){return localStorage.getItem('kc_api_key')||document.getElementById('apikey').value.trim();}
+document.getElementById('task').addEventListener('keydown',function(e){if((e.metaKey||e.ctrlKey)&&e.key==='Enter'){e.preventDefault();go();}});
+
+/* ── UI HELPERS ───────────────────────────────────── */
+function setPhase(t,c){var e=document.getElementById('sb-phase');e.textContent=t;e.style.color=c||'var(--text-muted)';}
+
+function setSba(id,st){
+  var dot=document.getElementById('sd-'+id),name=document.getElementById('sn-'+id),status=document.getElementById('ss-'+id);
+  if(!dot)return;
+  var colMap={cfo:'var(--cfo)',legal:'var(--legal)',ma:'var(--ma)',ppp:'var(--ppp)',board:'var(--board)',tech:'var(--tech)',research:'var(--research)',fredrick:'var(--gold)'};
+  var c=st==='working'?'var(--gold)':st==='done'?(colMap[id]||'var(--cfo)'):st==='error'?'var(--legal)':'var(--border2)';
+  dot.style.background=c;dot.style.boxShadow=st==='working'?'0 0 5px var(--gold)':'none';
+  if(name)name.style.color=c==='var(--border2)'?'var(--text-muted)':c;
+  if(status)status.textContent=st==='working'?'ACTIVE':st==='done'?'DONE':st==='error'?'ERR':'—';
+  if(status)status.style.color=c;
+  if(st==='working')dot.classList.add('pulse');else dot.classList.remove('pulse');
+}
+
+function setFredrick(st,sum,tags){
+  setSba('fredrick',st);
+  var fc=document.getElementById('fcard');fc.style.display='block';fc.classList.add('fade-in');
+  var badge=document.getElementById('f-badge');
+  if(st==='working'){badge.textContent='WORKING';badge.style.color='var(--gold)';}
+  else if(st==='done'||st==='briefed'){badge.textContent='COMPLETE';badge.style.color='var(--gold)';}
+  else{badge.textContent='ERROR';badge.style.color='var(--legal)';}
+  if(sum){document.getElementById('f-sum').textContent=sum;lastSummary=sum;}
+  if(tags&&tags.length){
+    var t=document.getElementById('f-tags');t.innerHTML='';
+    tags.forEach(function(id){
+      var colMap={cfo:'var(--cfo)',legal:'var(--legal)',ma:'var(--ma)',ppp:'var(--ppp)',board:'var(--board)',tech:'var(--tech)',research:'var(--research)'};
+      var c=colMap[id]||'#94A3B8';var s=document.createElement('span');s.className='f-tag';
+      s.textContent=(AN[id]||id).toUpperCase();s.style.color=c;s.style.background=c.replace('var(--','').replace(')','');
+      s.style.background='rgba(255,255,255,0.05)';s.style.border='1px solid '+c.replace(')','')+', 0.3)'.replace('var(--','rgba(');
+      t.appendChild(s);
+    });
+    lastAgents=tags;
+  }
+}
+
+function friendlyError(msg){
+  if(!msg)return 'Unknown error.';
+  var m=String(msg);
+  if(/rate_limit|exceeded_limit|429/i.test(m))
+    return 'Rate limit reached — your API tier allows only so many requests per minute. The app auto-retried but the limit held. Wait ~30 seconds and click RETRY, or raise your tier in console.anthropic.com (add credits to reach Tier 2 for 1,000 req/min).';
+  if(/overloaded|529/i.test(m))
+    return 'Anthropic servers are temporarily overloaded. Wait a moment and click RETRY.';
+  if(/authentication|invalid x-api-key|401/i.test(m))
+    return 'API key rejected. Check the key in the sidebar (bottom-left) is correct and active, and that billing is set up in the console.';
+  if(/credit|billing|402/i.test(m))
+    return 'Billing issue — your account may be out of credits. Add credits at console.anthropic.com → Billing.';
+  return m;
+}
+
+function showAgentCard(id,st,brief,out,usage){var completedAt=new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});if(usage)lastUsage[id]=usage;
+  setSba(id,st);
+  var card=document.getElementById('ac-'+id);if(!card)return;
+  card.classList.add('show','fade-in');
+  var badge=document.getElementById('ab-'+id);
+  if(badge)badge.textContent=st==='working'?'RUNNING':st==='done'?'DONE':'ERROR';
+  if(brief){document.getElementById('abt-'+id).textContent=brief;lastBriefs[id]=brief;}
+  if(out){
+    var display=st==='error'?friendlyError(out):out;
+    document.getElementById('ao-'+id).innerHTML=mdToHtml(display);lastOutputs[id]=out;
+    var rb=document.getElementById('ar-'+id);if(rb)rb.className='retry-btn'+(st==='error'?' show':'');
+  }
+}
+
+/* ── BACKUP: EXPORT / IMPORT ─────────────────── */
+function exportData(){
+  var data={
+    v:3,exported:new Date().toISOString(),
+    businesses:JSON.parse(localStorage.getItem('kc_businesses')||'[]'),
+    active:localStorage.getItem('kc_active_biz')||'',
+    history:JSON.parse(localStorage.getItem('kc_history_v3')||'{}')
+    /* API key deliberately excluded — never put credentials in a backup file */
+  };
+  var blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='kunoch-backup-'+new Date().toISOString().slice(0,10)+'.json';
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+  setTimeout(function(){URL.revokeObjectURL(a.href);},5000);
+}
+async function importData(input){
+  var f=input.files&&input.files[0];if(!f)return;
+  var reader=new FileReader();
+  reader.onload=async function(){
+    try{
+      var data=JSON.parse(reader.result);
+      if(!data.businesses||!Array.isArray(data.businesses))throw new Error('Not a Kunoch backup file');
+      var ok=await confirmSheet('Import backup from '+(data.exported||'unknown date')+'? This REPLACES current businesses and history on this device.','Import Backup');if(!ok)return;
+      localStorage.setItem('kc_businesses',JSON.stringify(data.businesses));
+      if(data.active)localStorage.setItem('kc_active_biz',data.active);
+      localStorage.setItem('kc_history_v3',JSON.stringify(data.history||{}));
+      loadBusinesses();renderBizUI();loadHistory();
+      showErr('Backup imported — '+data.businesses.length+' businesses restored.');
+    }catch(e){showErr('Import failed: '+e.message);}
+    input.value='';
+  };
+  reader.readAsText(f);
+}
+
+/* ── PLATFORM HINT ─────────────────────────────── */
+(function(){
+  var isMac=navigator.platform.toUpperCase().indexOf('MAC')>=0;
+  var k=document.getElementById('run-hint-key');if(k)k.textContent=isMac?'⌘':'Ctrl';
+})();
+
+/* ── ESCAPE TO CLOSE ───────────────────────────── */
+document.addEventListener('keydown',function(e){
+  if(e.key==='Escape'){
+    document.getElementById('api-panel').classList.remove('open');
+    closeBizMenu();
+    closeConfirm();
+  }
+});
+
+/* ── CONFIRMATION SHEET ────────────────────────── */
+var confirmResolve=null;
+function confirmSheet(msg,title){
+  return new Promise(function(res){
+    confirmResolve=res;
+    document.getElementById('cfm-title').textContent=title||'Confirm';
+    document.getElementById('cfm-msg').textContent=msg||'Are you sure?';
+    document.getElementById('cfm-backdrop').classList.add('open');
+  });
+}
+function closeConfirm(){document.getElementById('cfm-backdrop').classList.remove('open');if(confirmResolve){confirmResolve(false);confirmResolve=null;}}
+function doConfirm(){document.getElementById('cfm-backdrop').classList.remove('open');if(confirmResolve){confirmResolve(true);confirmResolve=null;}}
+
+/* Run button shows the active business — scope is in your click path */
+function updateRunBtn(){
+  var btn=document.getElementById('runbtn');
+  if(!btn||btn.disabled)return;
+  if(dirScope==='cross'){
+    btn.textContent='▶ ISSUE — PORTFOLIO ('+getCrossSelection().length+')';
+  }else{
+    var b=getActiveBiz();
+    btn.textContent='▶ ISSUE — '+((b&&b.name)||'').toUpperCase();
+  }
+}
+
+/* ── LIGHTWEIGHT MARKDOWN → HTML (safe) ──────── */
+function mdToHtml(src){
+  if(!src)return '';
+  var s=src.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  var lines=s.split('\n');
+  var html='',inUl=false,inOl=false;
+  function closeLists(){if(inUl){html+='</ul>';inUl=false;}if(inOl){html+='</ol>';inOl=false;}}
+  function inline(x){
+    return x
+      .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+      .replace(/__(.+?)__/g,'<strong>$1</strong>')
+      .replace(/(^|[^*])\*([^*]+?)\*(?!\*)/g,'$1<em>$2</em>');
+  }
+  for(var i=0;i<lines.length;i++){
+    var t=lines[i].trim();
+    if(!t){closeLists();continue;}
+    var hMatch=t.match(/^#{1,6}\s+(.*)$/);
+    var boldOnly=t.match(/^\*\*(.+?)\*\*:?$/);
+    if(hMatch){closeLists();html+='<h4>'+inline(hMatch[1])+'</h4>';continue;}
+    if(boldOnly){closeLists();html+='<h4>'+inline(boldOnly[1])+'</h4>';continue;}
+    var olMatch=t.match(/^(\d+)[\.\)]\s+(.*)$/);
+    if(olMatch){if(!inOl){closeLists();html+='<ol>';inOl=true;}html+='<li>'+inline(olMatch[2])+'</li>';continue;}
+    var ulMatch=t.match(/^[-•*]\s+(.*)$/);
+    if(ulMatch){if(!inUl){closeLists();html+='<ul>';inUl=true;}html+='<li>'+inline(ulMatch[1])+'</li>';continue;}
+    closeLists();
+    html+='<p>'+inline(t)+'</p>';
+  }
+  closeLists();
+  return html;
+}
+
+function toggleBrief(id){
+  var t=document.getElementById('abt-'+id);t.classList.toggle('expanded');
+  var lbl=document.querySelector('#abr-'+id+' .acard-brief-lbl');
+  if(lbl)lbl.textContent=t.classList.contains('expanded')?'FREDRICK\'S BRIEF ▴':'FREDRICK\'S BRIEF ▾';
+}
+
+function showErr(msg,color){var e=document.getElementById('errbox');
+  if(color){e.innerHTML='<strong style="color:'+color+'">✓</strong> '+escHtml(msg);e.style.borderColor='var(--gold-dim)';}
+  else{e.innerHTML='<strong>ERROR:</strong> '+escHtml(msg);e.style.borderColor='';}
+  e.style.display='block';}
+
+function copyOutput(id){
+  navigator.clipboard.writeText(lastOutputs[id]||'').then(function(){
+    var btn=document.querySelector('#ac-'+id+' .copy-btn');
+    if(btn){btn.textContent='COPIED ✓';btn.classList.add('copied');setTimeout(function(){btn.textContent='COPY';btn.classList.remove('copied');},2000);}
+  });
+}
+function copySyn(){
+  navigator.clipboard.writeText(lastSynthesis||'').then(function(){
+    var btn=document.querySelector('#syn-footer .copy-btn');
+    if(btn){btn.textContent='COPIED ✓';btn.classList.add('copied');setTimeout(function(){btn.textContent='COPY BRIEFING';btn.classList.remove('copied');},2000);}
+  });
+}
+
+/* ── API CALL WITH RETRY ──────────────────────────── */
+/* Model strategy: frontier model for orchestration + synthesis, fast model for specialist fan-out */
+var MODELS={orchestrator:'claude-fable-5',specialist:'claude-sonnet-4-6'};
+var TOKENS={plan:2048,specialist:4096,synthesis:8192};
+
+function callAPI(system,content,attempt,model,maxTok){
+  attempt=attempt||1;
+  model=model||MODELS.specialist;
+  maxTok=maxTok||TOKENS.specialist;
+  var key=getKey();if(!key)return Promise.reject(new Error('No API key — open the sidebar'));
+  return fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+    body:JSON.stringify({model:model,max_tokens:maxTok,system:system,messages:[{role:'user',content:content}]})
+  }).then(function(r){
+    // 429 = rate limit. Honor retry-after header if present, else exponential backoff. Up to 5 tries.
+    if(r.status===429&&attempt<6){
+      var ra=parseFloat(r.headers.get('retry-after'));
+      var waitMs=(!isNaN(ra)&&ra>0)?(ra*1000+250):Math.min(1500*Math.pow(1.7,attempt-1),12000);
+      return new Promise(function(res){setTimeout(function(){res(callAPI(system,content,attempt+1,model,maxTok));},waitMs);});
+    }
+    // transient server errors
+    if((r.status===529||r.status===500||r.status===503)&&attempt<5){
+      return new Promise(function(res){setTimeout(function(){res(callAPI(system,content,attempt+1,model,maxTok));},Math.min(2000*attempt,10000));});
+    }
+    if(!r.ok)return r.text().then(function(t){throw new Error(t.slice(0,300));});
+    return r.json();
+  }).then(function(d){
+    // Fable 5 (orchestrator) returns a thinking block as content[0], so scan for the first type:'text' block.
+    var txt='';
+    if(d&&d.content&&d.content.length){
+      for(var ci=0;ci<d.content.length;ci++){var bl=d.content[ci];if(bl&&bl.type==='text'&&bl.text){txt=bl.text;break;}}
+    }
+    return{text:txt,usage:(d&&d.usage)||{input_tokens:0,output_tokens:0}};});
+}
+
+function extractJSON(raw){if(typeof raw==='object'&&raw.text)raw=raw.text;
+  var clean=raw.replace(/```json|```/gi,'').trim();
+  try{return JSON.parse(clean);}catch(e){}
+  var s=clean.indexOf('{'),en=clean.lastIndexOf('}');
+  if(s>=0&&en>s){try{return JSON.parse(clean.slice(s,en+1));}catch(e2){}}
+  throw new Error('Fredrick returned unexpected format: '+raw.slice(0,200));
+}
+
+function retryAgent(id){
+  if(!currentPlan||!currentPlan.briefs||!currentPlan.briefs[id])return;
+  showAgentCard(id,'working',lastBriefs[id]||'',null);
+  callAPI(SP[id],buildContent(currentPlan.briefs[id]))
+    .then(function(o){showAgentCard(id,'done',null,o);})
+    .catch(function(e){showAgentCard(id,'error',null,e.message);});
+}
+
+/* ── MAIN RUN ─────────────────────────────────────── */
+function doneState(ok){document.getElementById('followup-sec').style.display=ok?'block':'none';if(ok){var fu=document.getElementById('followup-agents');fu.innerHTML=lastAgents.map(function(id){return'<label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-family:DM Mono,monospace;font-size:9px;color:var(--text-muted)" class="fu-label"><input type="checkbox" class="fu-chk" data-agent="'+id+'" checked style="accent-color:var(--gold)"> '+(AN[id]||id).toUpperCase()+'</label>';}).join('');}
+  document.getElementById('runbtn').disabled=false;updateRunBtn();
+  if(ok){document.getElementById('rstbtn').style.display='inline-block';document.getElementById('pdfbtn').style.display='inline-block';}
+  running=false;
+}
+
+function go(){
+  var task=document.getElementById('task').value.trim();
+  if(!task||running)return;
+  if(!getKey()){showErr('No API key set. Open the panel at the bottom-left of the sidebar, paste your sk-ant-… key, and click SAVE KEY.');document.getElementById('api-panel').classList.add('open');return;}
+  if(!uploadedDocs.every(function(d){return d.ready;})){showErr('Files still processing. Please wait.');return;}
+
+  var cross=(dirScope==='cross');
+  if(cross){
+    crossSel=getCrossSelection();
+    if(crossSel.length<2){showErr('CROSS-BUSINESS: select at least 2 businesses in the scope picker above.');return;}
+  }
+  // In manual mode (single scope only), validate selection
+  var manualSel=(!cross&&selMode==='manual')?getManualSelection():[];
+  if(!cross&&selMode==='manual'&&manualSel.length===0){showErr('MANUAL MODE: Please check at least one agent in the sidebar before running.');return;}
+
+  running=true;lastTask=task;lastOutputs={};lastBriefs={};lastSynthesis='';lastSummary='';lastAgents=[];currentPlan=null;
+  runIsCross=cross;runScopeIds=cross?crossSel.slice():null;
+  setCrossBanner(cross?crossSel.map(function(id){var b=businesses.find(function(x){return x.id===id;});return b?b.name:id;}):null);
+  document.getElementById('runbtn').disabled=true;document.getElementById('runbtn').textContent='RUNNING...';
+  document.getElementById('rstbtn').style.display='none';document.getElementById('pdfbtn').style.display='none';
+  document.getElementById('errbox').style.display='none';
+  document.getElementById('results').style.display='block';
+  document.getElementById('syn-card').style.display='none';
+  document.getElementById('agents-lbl').style.display='none';
+  document.querySelectorAll('.acard').forEach(function(c){c.classList.remove('show');});
+  document.querySelectorAll('.acard-body').forEach(function(b){b.textContent='';});
+  document.querySelectorAll('.acard-brief-text').forEach(function(b){b.textContent='';b.classList.remove('expanded');});
+  ['fredrick','cfo','legal','ma','ppp','board','tech','research'].forEach(function(id){setSba(id,'idle');});
+
+  setPhase('FREDRICK READING','var(--gold)');
+  setFredrick('working','Reviewing directive and assigning agents...',[]);
+
+  var docNote=uploadedDocs.length?' [Documents: '+uploadedDocs.map(function(d){return d.name;}).join(', ')+']':'';
+
+  // In manual mode (single scope only), bypass Fredrick's selection but still get his summary; cross always uses Fredrick's portfolio planning
+  if(!cross&&selMode==='manual'){
+    // Build fake plan with manual selection
+    var manualBriefs={};
+    manualSel.forEach(function(id){manualBriefs[id]='Analyse the task: '+task+(docNote?docNote:'');});
+    var fakePlan={task_summary:task.slice(0,80)+(task.length>80?'...':''),agents_selected:manualSel,briefs:manualBriefs};
+    // Still run Fredrick to get a task summary and proper briefs
+    callAPI(SP.fredrick,buildContent(task+docNote),1,MODELS.orchestrator,TOKENS.plan).then(function(raw){
+      try{
+        var fp=extractJSON(raw);
+        // Use Fredrick's summary but override agent selection
+        fakePlan.task_summary=fp.task_summary||fakePlan.task_summary;
+        // Use Fredrick's briefs where available, fallback to generic
+        manualSel.forEach(function(id){if(fp.briefs&&fp.briefs[id])fakePlan.briefs[id]=fp.briefs[id];});
+      }catch(e){}
+      runWithPlan(fakePlan,task,docNote);
+    }).catch(function(){runWithPlan(fakePlan,task,docNote);});
+  } else {
+    var planPrompt=cross?SP.fredrickCross:SP.fredrick;
+    callAPI(planPrompt,buildContent(task+docNote),1,MODELS.orchestrator,TOKENS.plan).then(function(raw){
+      var plan;
+      try{plan=extractJSON(raw);}
+      catch(e){setFredrick('error','Could not parse Fredrick: '+e.message,[]);showErr(e.message);doneState(false);return;}
+      runWithPlan(plan,task,docNote);
+    }).catch(function(e){setFredrick('error',e.message,[]);showErr(e.message);doneState(false);});
+  }
+}
+
+function runWithPlan(plan,task,docNote){
+  currentPlan=plan;
+  setFredrick('briefed',plan.task_summary,plan.agents_selected||[]);
+  document.getElementById('agents-lbl').style.display='block';
+  setPhase('AGENTS ACTIVE','var(--tech)');
+
+  var ids=plan.agents_selected||[];
+  var outputs={};
+  // Stagger launches ~600ms apart so all specialists don't hit the API in the same instant
+  // (avoids tripping per-minute rate limits on lower tiers). Each still runs concurrently once launched.
+  var promises=ids.map(function(id,i){
+    var brief=plan.briefs&&plan.briefs[id];
+    if(!brief||!SP[id])return Promise.resolve();
+    showAgentCard(id,'working',brief,null);
+    return new Promise(function(resolve){
+      setTimeout(function(){
+        callAPI(SP[id],buildContent(brief))
+          .then(function(o){outputs[id]=o;showAgentCard(id,'done',null,o);})
+          .catch(function(e){outputs[id]='Agent failed: '+e.message;showAgentCard(id,'error',null,outputs[id]);})
+          .then(resolve);
+      },i*600);
+    });
+  });
+
+  Promise.all(promises).then(function(){
+    var ok=Object.keys(outputs).filter(function(id){return!outputs[id].startsWith('Agent failed');}).length;
+    if(!ok){showErr('All agents failed. Check API credits and retry.');doneState(false);return;}
+    setPhase('SYNTHESISING','var(--gold)');
+    setFredrick('working',lastSummary,lastAgents);
+    var si='DIRECTIVE: '+task+'\n\n'+Object.keys(outputs).map(function(id){return'=== '+(AN[id]||id).toUpperCase()+' ===\n'+outputs[id];}).join('\n\n');
+    var synInput=activeCtx()+si;
+    function renderSynthesis(s){var c='';if(lastAgents&&lastAgents.length){c='<div style="font-family:DM Mono,monospace;font-size:9px;color:var(--text-muted);letter-spacing:1px;margin-bottom:14px">Contributing agents: '+lastAgents.map(function(a){return(AN[a]||a).toUpperCase();}).join(' · ')+'</div>';}return c+mdToHtml(s);}
+callAPI(runIsCross?SP.synthesisCross:SP.synthesis,synInput,1,MODELS.orchestrator,TOKENS.synthesis).then(function(o){
+      lastSynthesis=o;
+      document.getElementById('syn-body').innerHTML=renderSynthesis(o);var swc=document.getElementById('syn-wc');if(swc)swc.textContent=fmtCount(o);
+      document.getElementById('syn-card').style.display='block';
+      document.getElementById('syn-card').classList.add('fade-in');
+      document.getElementById('syn-card').scrollIntoView({behavior:'smooth',block:'start'});
+      setFredrick('done',lastSummary,lastAgents);setSba('fredrick','done');
+      setPhase('COMPLETE','var(--cfo)');
+      doneState(true);saveToHistory(task,lastSummary);var runCost=0;Object.keys(lastUsage).forEach(function(k){var u=lastUsage[k];if(u)runCost+=calcCost(u,k==='synthesis'?MODELS.orchestrator:MODELS.specialist);});saveCost(runCost);updateCostDisplay();
+    }).catch(function(e){showErr('Synthesis failed: '+e.message);doneState(false);});
+  });
+}
+
+/* ── HISTORY (per business, full runs, localStorage) ─────── */
+function sbPushRun(runId,bizId,record){
+  if(!sb||!sbUser)return;
+  sb.from('runs').upsert({user_id:sbUser.id,run_id:runId,biz_id:bizId,data:record,updated_at:new Date().toISOString()},{onConflict:'user_id,run_id'}).then(function(r){if(r&&r.error)console.warn('run sync:',r.error.message);});
+}
+function saveToHistory(task,summary){
+  if(runIsCross&&runScopeIds&&runScopeIds.length>=2){saveCrossToHistory(task,summary,runScopeIds.slice());return;}
+  if(!activeBizId)return;
+  var all=JSON.parse(localStorage.getItem('kc_history_v3')||'{}');
+  var hist=all[activeBizId]||[];
+  var rid='run_'+Date.now().toString(36);
+  var rec={
+    id:rid,
+    task:task,summary:summary,
+    agents:lastAgents.slice(),briefs:JSON.parse(JSON.stringify(lastBriefs)),
+    outputs:JSON.parse(JSON.stringify(lastOutputs)),synthesis:lastSynthesis,
+    time:new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}),
+    date:new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short'})
+  };
+  hist.unshift(rec);
+  sbPushRun(rid,activeBizId,rec);
+  audit('run.created','run',rid,{biz:activeBizId,agents:rec.agents});
+  if(hist.length>8)hist=hist.slice(0,8);
+  all[activeBizId]=hist;
+  // quota-safe write: drop oldest runs across businesses until it fits
+  for(var tries=0;tries<6;tries++){
+    try{localStorage.setItem('kc_history_v3',JSON.stringify(all));break;}
+    catch(e){
+      var trimmed=false;
+      Object.keys(all).forEach(function(b){if(all[b].length>2){all[b]=all[b].slice(0,all[b].length-1);trimmed=true;}});
+      if(!trimmed){showErr('History storage full — use EXPORT DATA to back up, then history will recycle.');break;}
+    }
+  }
+  loadHistory();
+}
+
+/* Cross-business run: file one copy under EVERY involved business (tagged to all) */
+function saveCrossToHistory(task,summary,bizIds){
+  var base='xrun_'+Date.now().toString(36);
+  var names=bizIds.map(function(id){var b=businesses.find(function(x){return x.id===id;});return b?b.name:id;});
+  var now=new Date();
+  var time=now.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+  var date=now.toLocaleDateString('en-GB',{day:'2-digit',month:'short'});
+  var all=JSON.parse(localStorage.getItem('kc_history_v3')||'{}');
+  bizIds.forEach(function(bid){
+    var rid=base+'__'+bid;
+    var rec={id:rid,task:task,summary:summary,cross:true,biz_ids:bizIds.slice(),biz_names:names.slice(),
+      agents:lastAgents.slice(),briefs:JSON.parse(JSON.stringify(lastBriefs)),outputs:JSON.parse(JSON.stringify(lastOutputs)),
+      synthesis:lastSynthesis,time:time,date:date};
+    var hist=all[bid]||[];
+    hist.unshift(rec);
+    if(hist.length>8)hist=hist.slice(0,8);
+    all[bid]=hist;
+    sbPushRun(rid,bid,rec);
+  });
+  for(var tries=0;tries<6;tries++){
+    try{localStorage.setItem('kc_history_v3',JSON.stringify(all));break;}
+    catch(e){var t=false;Object.keys(all).forEach(function(b){if(all[b].length>2){all[b]=all[b].slice(0,all[b].length-1);t=true;}});if(!t){showErr('History storage full — use EXPORT DATA to back up.');break;}}
+  }
+  audit('cross_run.created','run',base,{businesses:bizIds,names:names});
+  if(bizIds.indexOf(activeBizId)<0){activeBizId=bizIds[0];saveActiveBiz();renderBizUI();}
+  loadHistory();
+}
+function loadHistory(){
+  var all=JSON.parse(localStorage.getItem('kc_history_v3')||'{}');
+  var hist=(activeBizId&&all[activeBizId])||[];
+  var el=document.getElementById('sb-history');
+  if(!hist.length){el.innerHTML='<div class="hist-empty">NO HISTORY YET</div>';return;}
+  el.innerHTML='';
+  hist.forEach(function(h,idx){
+    var d=document.createElement('div');d.className='hist-item';
+    var meta=(h.date?h.date+' · ':'')+h.time+' · '+escHtml((h.summary||'').slice(0,40))+(h.cross?' · <span class="hist-cross">◆ '+((h.biz_ids&&h.biz_ids.length)||2)+' BIZ</span>':'')+((h.kind==='auto_review')?' · <span class="hist-cross">◷ WEEKLY</span>':'');
+    d.innerHTML='<div class="hist-task">'+escHtml(h.task.slice(0,60))+(h.task.length>60?'…':'')+'</div>'
+      +'<div class="hist-meta">'+meta+(h.outputs?' · <span style="color:var(--gold)">OPEN ▸</span>':'')+'</div>';
+    d.onclick=function(){
+      if(h.outputs){openRun(h);}
+      else{document.getElementById('task').value=h.task;document.getElementById('task').focus();}
+    };
+    el.appendChild(d);
+  });
+}
+/* Reopen a saved run read-only: restores Fredrick card, agent outputs, synthesis, and enables PDF export */
+function openRun(h){
+  resetAll();
+  setCrossBanner(h.cross?(h.biz_names||[]):null);
+  document.getElementById('task').value=h.task;
+  lastTask=h.task;lastSummary=h.summary;lastAgents=h.agents||[];
+  lastBriefs=h.briefs||{};lastOutputs=h.outputs||{};lastSynthesis=h.synthesis||'';
+  currentPlan={briefs:lastBriefs,agents_selected:lastAgents,task_summary:lastSummary};
+  setFredrick('done',h.summary,lastAgents);
+  document.getElementById('agents-lbl').style.display='block';
+  lastAgents.forEach(function(id){
+    if(lastOutputs[id])showAgentCard(id,'done',lastBriefs[id]||'',lastOutputs[id]);
+  });
+  if(lastSynthesis){
+    document.getElementById('syn-body').innerHTML=renderSynthesis(lastSynthesis);
+    document.getElementById('syn-card').style.display='block';
+  }
+  document.getElementById('results').style.display='block';
+  document.getElementById('rstbtn').style.display='inline-block';
+  document.getElementById('pdfbtn').style.display='inline-block';
+  setPhase('ARCHIVED RUN · '+(h.date||'')+' '+(h.time||''),'var(--board)');
+  document.getElementById('results').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+/* ── PDF EXPORT ───────────────────────────────────── */
+function downloadPDF(){
+  var now=new Date();
+  var ds=now.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  var ts=now.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+  var bizName=(getActiveBiz()&&getActiveBiz().name)||'';
+  var agSec='';
+  lastAgents.forEach(function(id){
+    if(!lastOutputs[id])return;
+    var c=ACOLS_PDF[id]||'#555';
+    agSec+='<section class="agent">';
+    agSec+='<div class="agent-hd" style="border-color:'+c+'"><span class="agent-dot" style="background:'+c+'"></span>'+(AN[id]||id).toUpperCase()+'</div>';
+    agSec+='<div class="agent-body">'+mdToHtml(lastOutputs[id])+'</div>';
+    agSec+='</section>';
+  });
+  var docNote=uploadedDocs.length?'<div class="meta-line">ATTACHMENTS: '+uploadedDocs.map(function(d){return escHtml(d.name);}).join(' · ')+'</div>':'';
+  var modeNote='AGENT SELECTION: '+(selMode==='manual'?'MANUAL OVERRIDE':'AUTO · FREDRICK ORCHESTRATION');
+  var tags=lastAgents.map(function(id){return'<span class="tag">'+(AN[id]||id).toUpperCase()+'</span>';}).join('');
+
+  var h='<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Kunoch Command — '+escHtml(bizName||'Briefing')+'</title>'
+    +'<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">'
+    +'<style>'
+    +'*{margin:0;padding:0;box-sizing:border-box}'
+    +'body{font-family:"DM Sans",sans-serif;color:#23272F;background:#fff;font-size:10.5pt;line-height:1.65;-webkit-print-color-adjust:exact;print-color-adjust:exact}'
+    +'.page{padding:0}'
+    /* letterhead */
+    +'.lh{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2.5px solid #9A7830;padding-bottom:16px;margin-bottom:22px}'
+    +'.lh-l .logo{font-family:"Playfair Display",serif;font-size:26pt;color:#9A7830;line-height:1;font-weight:700}'
+    +'.lh-l .sub{font-family:"DM Mono",monospace;font-size:6.5pt;color:#9AA0AB;letter-spacing:3.5px;margin-top:6px}'
+    +'.lh-r{text-align:right;font-family:"DM Mono",monospace;font-size:7pt;color:#9AA0AB;letter-spacing:1.5px;line-height:1.8}'
+    +'.lh-r .biz{color:#9A7830;font-size:9pt;font-weight:500;letter-spacing:2px}'
+    /* directive block */
+    +'.directive{background:#FBF8F1;border:1px solid #ECE3CE;border-left:3px solid #9A7830;padding:16px 20px;margin-bottom:8px;border-radius:3px}'
+    +'.directive .lbl{font-family:"DM Mono",monospace;font-size:7pt;color:#9A7830;letter-spacing:3px;margin-bottom:7px}'
+    +'.directive .txt{font-size:13pt;color:#1A1D24;font-family:"Playfair Display",serif;line-height:1.4}'
+    +'.meta-line{font-family:"DM Mono",monospace;font-size:7pt;color:#9AA0AB;letter-spacing:1px;margin-top:9px}'
+    /* section labels */
+    +'.sec{font-family:"DM Mono",monospace;font-size:7.5pt;color:#9A7830;letter-spacing:3.5px;border-bottom:1px solid #EAEAEA;padding-bottom:6px;margin:30px 0 16px;font-weight:500}'
+    /* task summary */
+    +'.summary{background:#F7F8FA;border:1px solid #EDEFF2;padding:14px 18px;border-radius:3px;font-style:italic;color:#3A3F48;font-size:11pt;line-height:1.5}'
+    +'.tags{margin-top:12px}'
+    +'.tag{font-family:"DM Mono",monospace;font-size:6.5pt;letter-spacing:1.5px;padding:3px 11px;border:1px solid #D8C9A0;color:#9A7830;border-radius:20px;margin-right:6px;display:inline-block}'
+    /* agent sections */
+    +'.agent{margin-bottom:22px;page-break-inside:avoid;border:1px solid #EDEFF2;border-radius:4px;overflow:hidden}'
+    +'.agent-hd{font-family:"DM Mono",monospace;font-size:9pt;font-weight:500;letter-spacing:2.5px;color:#1A1D24;padding:11px 18px;background:#FAFBFC;border-left:4px solid #9A7830;display:flex;align-items:center;gap:9px}'
+    +'.agent-dot{width:7px;height:7px;border-radius:50%;display:inline-block}'
+    +'.agent-body{padding:16px 20px 18px}'
+    /* rendered markdown */
+    +'.agent-body h4,.synbox h4{font-family:"DM Mono",monospace;font-size:8.5pt;letter-spacing:1.5px;color:#9A7830;text-transform:uppercase;margin:15px 0 7px;font-weight:600}'
+    +'.agent-body h4:first-child,.synbox h4:first-child{margin-top:0}'
+    +'.agent-body p,.synbox p{margin-bottom:9px;color:#2A2E36}'
+    +'.agent-body strong,.synbox strong{color:#1A1D24;font-weight:600}'
+    +'.agent-body ul,.synbox ul{margin:7px 0 9px 2px;list-style:none}'
+    +'.agent-body ol,.synbox ol{margin:7px 0 9px 20px}'
+    +'.agent-body li,.synbox li{margin-bottom:5px;color:#2A2E36}'
+    +'.agent-body ul li{position:relative;padding-left:15px}'
+    +'.agent-body ul li::before,.synbox ul li::before{content:"›";position:absolute;left:2px;color:#9A7830;font-weight:600}'
+    +'.synbox ul li{position:relative;padding-left:15px}'
+    /* executive briefing */
+    +'.synwrap{page-break-inside:avoid}'
+    +'.synbox{border:1.5px solid #1A1D24;border-radius:4px;padding:24px 28px;background:#fff}'
+    +'.synbox .syn-ttl{font-family:"Playfair Display",serif;font-size:16pt;color:#1A1D24;margin-bottom:16px;font-weight:600;border-bottom:1px solid #EAEAEA;padding-bottom:10px}'
+    /* footer */
+    +'.footer{margin-top:30px;border-top:1px solid #EAEAEA;padding-top:10px;font-family:"DM Mono",monospace;font-size:6.5pt;color:#BFC4CC;letter-spacing:1.5px;display:flex;justify-content:space-between}'
+    +'@page{margin:18mm 16mm}'
+    +'@media print{body{padding:0}.agent,.synwrap{page-break-inside:avoid}}'
+    +'</style></head><body><div class="page">';
+  // letterhead
+  h+='<div class="lh"><div class="lh-l"><div class="logo">Kunoch Command</div>'
+    +'<div class="sub">FAMILY OFFICE · EXECUTIVE INTELLIGENCE · CONFIDENTIAL</div></div>'
+    +'<div class="lh-r">'+(bizName?'<div class="biz">'+escHtml(bizName.toUpperCase())+'</div>':'')
+    +'<div>'+ds+'</div><div>'+ts+'</div></div></div>';
+  // directive
+  h+='<div class="directive"><div class="lbl">DIRECTIVE</div><div class="txt">'+escHtml(lastTask)+'</div>'
+    +docNote+'<div class="meta-line">'+modeNote+'</div></div>';
+  // task summary
+  h+='<div class="sec">TASK SUMMARY · FREDRICK</div><div class="summary">'+escHtml(lastSummary)+'</div>'
+    +'<div class="tags">'+tags+'</div>';
+  // specialist outputs
+  h+='<div class="sec">SPECIALIST OUTPUTS</div>'+agSec;
+  // context appendix
+  if(biz){
+    h+='<div class=\'sec\'>BUSINESS CONTEXT</div>';
+    h+='<div style=\'background:#F7F8FA;border:1px solid #EDEFF2;padding:14px 18px;border-radius:3px;margin-bottom:16px\'>';
+    h+='<div style=\'font-family:DM Mono,monospace;font-size:8pt;color:#9A7830;letter-spacing:2px;margin-bottom:6px\'>'+(biz.name||'').toUpperCase()+'</div>';
+    h+='<div style=\'font-size:10pt;color:#3A3F48;line-height:1.6\'>';
+    if(biz.positioning)h+='<p><strong>Positioning:</strong> '+escHtml(biz.positioning)+'</p>';
+    if(biz.stage)h+='<p><strong>Stage:</strong> '+escHtml(biz.stage)+'</p>';
+    if(biz.jurisdictions)h+='<p><strong>Jurisdictions:</strong> '+escHtml(biz.jurisdictions)+'</p>';
+    h+='</div></div>';
+  }
+  // executive briefing
+  h+='<div class="synwrap"><div class="sec">EXECUTIVE BRIEFING</div>'
+    +'<div class="synbox"><div class="syn-ttl">Fredrick\u2019s Executive Briefing</div>'
+    +mdToHtml(lastSynthesis)+'</div></div>';
+  h+='<div class="footer"><span>KUNOCH COMMAND · CONFIDENTIAL</span><span>'+escHtml(bizName.toUpperCase())+'</span></div>';
+  h+='</div></body></html>';
+
+  var w=window.open('','_blank','width=900,height=700');
+  if(w&&w.document){
+    w.document.write(h);w.document.close();w.onload=function(){w.focus();setTimeout(function(){w.print();},400);};
+  }else{
+    var blob=new Blob([h],{type:'text/html'});
+    var url=URL.createObjectURL(blob);
+    var w2=window.open(url,'_blank');
+    if(!w2){
+      var a=document.createElement('a');
+      a.href=url;a.download='Kunoch_Command_'+(bizName||'Briefing').replace(/\s+/g,'_')+'_'+now.toISOString().slice(0,10)+'.html';
+      document.body.appendChild(a);a.click();document.body.removeChild(a);
+      setTimeout(function(){URL.revokeObjectURL(url);},10000);
+      showErr('Popups are blocked. The briefing was downloaded as an HTML file — open it and press ⌘/Ctrl+P → Save as PDF. Tip: in the print dialog, turn OFF "Headers and footers" for a clean document.');
+    }else{
+      setTimeout(function(){URL.revokeObjectURL(url);},60000);
+    }
+  }
+}
+
+function escHtml(t){return(t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+/* ── RESET ────────────────────────────────────────── */
+function resetAll(){setCrossBanner(null);runIsCross=false;runScopeIds=null;document.getElementById('followup-sec').style.display='none';
+  document.getElementById('task').value='';
+  document.getElementById('errbox').style.display='none';
+  document.getElementById('results').style.display='none';
+  document.getElementById('rstbtn').style.display='none';
+  document.getElementById('pdfbtn').style.display='none';
+  document.getElementById('agents-lbl').style.display='none';
+  document.querySelectorAll('.acard').forEach(function(c){c.classList.remove('show');});
+  document.querySelectorAll('.acard-body').forEach(function(b){b.textContent='';});
+  document.querySelectorAll('.acard-brief-text').forEach(function(b){b.textContent='';b.classList.remove('expanded');});
+  document.getElementById('f-sum').textContent='';document.getElementById('f-tags').innerHTML='';
+  ['fredrick','cfo','legal','ma','ppp','board','tech','research'].forEach(function(id){setSba(id,'idle');});
+  setPhase('AWAITING ORDERS','');
+  uploadedDocs=[];renderPills();
+  lastOutputs={};lastBriefs={};lastSynthesis='';lastSummary='';lastAgents=[];currentPlan=null;running=false;
+}
+/* ── GUIDE ───────────────────────────────────── */
+function toggleGuide(){var el=document.getElementById('guide-backdrop');if(el)el.classList.toggle('open');}
+document.addEventListener('keydown',function(e){if(e.key==='Escape'){var g=document.getElementById('guide-backdrop');if(g&&g.classList.contains('open'))g.classList.remove('open');}});
+
+/* ── MEETING HELPERS: sha-256, audit, audio transcription ── */
+function sha256hex(buf){
+  return crypto.subtle.digest('SHA-256',buf).then(function(h){
+    return Array.prototype.map.call(new Uint8Array(h),function(b){return('0'+b.toString(16)).slice(-2);}).join('');
+  });
+}
+function audit(action,entity,entityId,detail){
+  if(!sb||!sbUser)return;
+  sb.from('audit_log').insert({user_id:sbUser.id,action:action,entity:entity,entity_id:entityId||'',detail:detail||{}}).then(function(){});
+}
+var AUDIO_EXT=['mp3','m4a','wav','mp4','aac','ogg','webm','flac'];
+function transcribeAudio(path){
+  return sb.auth.getSession().then(function(r){
+    var token=r&&r.data&&r.data.session&&r.data.session.access_token;
+    if(!token)throw new Error('Sign in to transcribe audio');
+    return fetch(SUPABASE_URL+'/functions/v1/transcribe',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+token,'apikey':SUPABASE_ANON},
+      body:JSON.stringify({storage_path:path})
+    });
+  }).then(function(r){return r.json().then(function(j){
+    if(!r.ok||(j&&j.error)){throw new Error((j&&j.error&&j.error.message)||('transcribe failed ('+r.status+')'));}
+    return j.transcript||'';
+  });});
+}
+
+/* ── MEETINGS PHASE 4 ────────────────────────── */
+var meetingsData=[];
+
+function toggleMeetings(){
+  var el=document.getElementById('meetings-backdrop');
+  if(!el)return;
+  var isOpen=el.classList.contains('open');
+  if(isOpen){el.classList.remove('open');}
+  else{
+    el.classList.add('open');
+    var biz=getActiveBiz();
+    document.getElementById('meetings-biz').textContent=biz?biz.name.toUpperCase():'—';
+    loadMeetings();
+    loadReviews();
+  }
+}
+
+function handleMeetingUpload(input){
+  var file=input.files[0];
+  if(!file)return;
+  input.value='';
+  var status=document.getElementById('meetings-parse-status');
+  var ext=file.name.split('.').pop().toLowerCase();
+  var isAudio=AUDIO_EXT.indexOf(ext)>=0;
+  var limit=(isAudio?50:20)*1024*1024;
+  if(file.size>limit){status.textContent=file.name+': too large (max '+(isAudio?50:20)+'MB)';status.style.color='var(--legal)';return;}
+  if(isAudio){
+    if(!sb||!sbUser){status.textContent='Sign in (sidebar → SYNC) to transcribe audio.';status.style.color='var(--legal)';return;}
+    status.textContent='Uploading audio '+file.name+'…';status.style.color='var(--text-dim)';
+    var storagePath=sbUser.id+'/'+Date.now().toString(36)+'_'+file.name.replace(/[^\w.\-]/g,'_');
+    var hashHex='n/a';
+    file.arrayBuffer().then(function(ab){return sha256hex(ab);}).then(function(hh){
+      hashHex=hh;
+      return sb.storage.from('meeting-files').upload(storagePath,file,{contentType:file.type||'application/octet-stream',upsert:false});
+    }).then(function(up){
+      if(up.error)throw new Error('storage upload failed: '+up.error.message);
+      status.textContent='Transcribing (Deepgram, diarised)…';
+      return transcribeAudio(storagePath);
+    }).then(function(tr){
+      if(!tr||!tr.trim())throw new Error('empty transcript');
+      status.textContent='Transcribed '+file.name+' · '+tr.length+' chars';status.style.color='var(--cfo)';
+      storeMeeting(file.name,tr,file.type,{sha256:hashHex,storage_path:storagePath,source_type:'audio'});
+    }).catch(function(e){status.textContent='Error: '+e.message;status.style.color='var(--legal)';});
+    return;
+  }
+  status.textContent='Parsing '+file.name+'…';
+  status.style.color='var(--text-dim)';
+  parseTranscript(file,function(err,text){
+    if(err){status.textContent='Error: '+err;status.style.color='var(--legal)';return;}
+    status.textContent='Parsed '+file.name+' · '+text.length+' chars';
+    status.style.color='var(--cfo)';
+    file.arrayBuffer().then(function(ab){return sha256hex(ab);}).then(function(hh){
+      storeMeeting(file.name,text,file.type,{sha256:hh,source_type:'file'});
+    }).catch(function(){storeMeeting(file.name,text,file.type,{sha256:'n/a',source_type:'file'});});
+  });
+}
+
+function parseTranscript(file,cb){
+  var name=file.name.toLowerCase();
+  var reader=new FileReader();
+  if(name.endsWith('.txt')||name.endsWith('.vtt')||name.endsWith('.srt')){
+    reader.onload=function(e){cb(null,e.target.result);};
+    reader.onerror=function(){cb('Read failed');};
+    reader.readAsText(file);
+  }else if(name.endsWith('.docx')){
+    reader.onload=function(e){
+      mammoth.extractRawText({arrayBuffer:e.target.result}).then(function(r){cb(null,r.value);}).catch(function(){cb('DOCX parse failed');});
+    };
+    reader.onerror=function(){cb('Read failed');};
+    reader.readAsArrayBuffer(file);
+  }else if(name.endsWith('.pdf')){
+    reader.onload=function(e){
+      var typedarray=new Uint8Array(e.target.result);
+      pdfjsLib.getDocument({data:typedarray}).promise.then(function(pdf){
+        var textPromises=[];
+        for(var i=1;i<=pdf.numPages;i++){
+          textPromises.push(pdf.getPage(i).then(function(page){return page.getTextContent().then(function(tc){return tc.items.map(function(it){return it.str;}).join(' ');});}));
+        }
+        Promise.all(textPromises).then(function(pages){cb(null,pages.join('\n'));}).catch(function(){cb('PDF extract failed');});
+      }).catch(function(){cb('PDF parse failed');});
+    };
+    reader.onerror=function(){cb('Read failed');};
+    reader.readAsArrayBuffer(file);
+  }else{cb('Unsupported format');}
+}
+
+function storeMeeting(title,transcript,mimeType,extra){
+  if(!activeBizId)return;
+  extra=extra||{};
+  var record={
+    biz_id:activeBizId,
+    title:title,
+    transcript:transcript,
+    platform:'imported',
+    meeting_date:new Date().toISOString().split('T')[0],
+    attendees:[],
+    decisions:[],
+    action_items:[],
+    open_questions:[],
+    flags:[],
+    raw_metadata:{mimeType:mimeType,size:transcript.length},
+    provenance:'imported',
+    sha256:extra.sha256||'n/a',
+    source_type:extra.source_type||'file',
+    storage_path:extra.storage_path||null
+  };
+  // Save to localStorage cache
+  var key='kc_meetings_'+activeBizId;
+  var all=JSON.parse(localStorage.getItem(key)||'[]');
+  record.id='mtg_'+Date.now().toString(36);
+  record.created_at=new Date().toISOString();
+  all.unshift(record);
+  localStorage.setItem(key,JSON.stringify(all));
+  // Sync to Supabase (live schema: meeting_id / biz_id / data JSONB)
+  if(sb&&sbUser){
+    sb.from('meetings').upsert({user_id:sbUser.id,meeting_id:record.id,biz_id:activeBizId,data:record},{onConflict:'user_id,meeting_id'}).then(function(r){
+      if(r&&r.error)console.warn('Meeting sync failed:',r.error.message);else console.log('Meeting synced');
+    });
+    audit('meeting.ingested','meeting',record.id,{sha256:record.sha256,filename:title,source_type:record.source_type,biz:activeBizId});
+  }
+  loadMeetings();
+}
+
+function runWeeklyReview(){
+  var btn=document.getElementById('weekly-review-btn');
+  var out=document.getElementById('weekly-review-output');
+  if(!btn||!out)return;
+  btn.disabled=true;btn.textContent='GENERATING…';
+  generateWeeklyReview(activeBizId).then(function(text){
+    out.style.display='none';
+    var biz=getActiveBiz();
+    renderReviewCard('Weekly Review — '+((biz&&biz.name)||'')+' · '+new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short'}),text);
+    if(sb&&sbUser)audit('review.generated','review',activeBizId,{});
+    btn.disabled=false;btn.textContent='REGENERATE WEEKLY REVIEW';
+  }).catch(function(e){
+    out.innerHTML='<div style="color:var(--legal);font-size:11px">Error: '+escHtml(e.message)+'</div>';
+    out.style.display='block';
+    btn.disabled=false;btn.textContent='GENERATE WEEKLY REVIEW';
+  });
+}
+
+/* ── REVIEW VIEWER (in-app read + copy + print/save-PDF) ── */
+var currentReview=null;
+function renderReviewCard(title,text){
+  currentReview={title:title,text:text||''};
+  var card=document.getElementById('mtg-review-card');
+  if(!card)return;
+  card.style.display='block';
+  card.innerHTML='<div class="mrv-hd"><div class="mrv-ttl">'+escHtml(title)+'</div><div class="mrv-lbl">FREDRICK</div></div>'
+    +'<div class="mrv-body">'+mdToHtml(text||'')+'</div>'
+    +'<div class="mrv-foot"><button class="copy-btn" onclick="copyReview(this)">COPY</button><button class="copy-btn" onclick="printReview()">↓ PRINT / SAVE PDF</button></div>';
+  card.scrollIntoView({behavior:'smooth',block:'start'});
+}
+function copyReview(btn){
+  if(!currentReview)return;
+  navigator.clipboard.writeText(currentReview.text||'').then(function(){if(btn){btn.classList.add('copied');btn.textContent='COPIED';setTimeout(function(){btn.classList.remove('copied');btn.textContent='COPY';},1500);}});
+}
+function printReview(){
+  if(!currentReview)return;
+  var biz=getActiveBiz();var bizName=(biz&&biz.name)||'';
+  var now=new Date();
+  var ds=now.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  var h='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>'+escHtml(currentReview.title)+'</title>'
+    +'<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">'
+    +'<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:"DM Sans",sans-serif;color:#23272F;font-size:11pt;line-height:1.65;padding:0;-webkit-print-color-adjust:exact}'
+    +'.lh{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:2.5px solid #9A7830;padding-bottom:14px;margin-bottom:22px}'
+    +'.logo{font-family:"Playfair Display",serif;font-size:24pt;color:#9A7830;font-weight:700}.sub{font-family:"DM Mono",monospace;font-size:6.5pt;color:#9AA0AB;letter-spacing:3px;margin-top:5px}'
+    +'.rhs{text-align:right;font-family:"DM Mono",monospace;font-size:7pt;color:#9AA0AB;letter-spacing:1.5px;line-height:1.9}.rhs .biz{color:#9A7830;font-size:9pt;letter-spacing:2px}'
+    +'.ttl{font-family:"Playfair Display",serif;font-size:17pt;color:#1A1D24;margin-bottom:16px}'
+    +'h4{font-family:"DM Mono",monospace;font-size:8.5pt;letter-spacing:1.5px;color:#9A7830;text-transform:uppercase;margin:16px 0 7px;font-weight:600}h4:first-child{margin-top:0}'
+    +'p{margin-bottom:9px;color:#2A2E36}strong{color:#1A1D24}ul{margin:7px 0 9px 2px;list-style:none}li{margin-bottom:5px;padding-left:15px;position:relative}ul li::before{content:"›";position:absolute;left:2px;color:#9A7830;font-weight:700}ol{margin:7px 0 9px 20px}'
+    +'.foot{margin-top:26px;border-top:1px solid #EAEAEA;padding-top:10px;font-family:"DM Mono",monospace;font-size:6.5pt;color:#BFC4CC;letter-spacing:1.5px;display:flex;justify-content:space-between}@page{margin:16mm}</style></head><body>'
+    +'<div class="lh"><div><div class="logo">Kunoch Command</div><div class="sub">FAMILY OFFICE · EXECUTIVE INTELLIGENCE · CONFIDENTIAL</div></div>'
+    +'<div class="rhs">'+(bizName?'<div class="biz">'+escHtml(bizName.toUpperCase())+'</div>':'')+'<div>'+ds+'</div></div></div>'
+    +'<div class="ttl">'+escHtml(currentReview.title)+'</div>'+mdToHtml(currentReview.text)
+    +'<div class="foot"><span>KUNOCH COMMAND · CONFIDENTIAL</span><span>WEEKLY REVIEW</span></div></body></html>';
+  var w=window.open('','_blank','width=860,height=720');
+  if(w&&w.document){w.document.write(h);w.document.close();w.onload=function(){w.focus();setTimeout(function(){w.print();},400);};}
+  else{showErr('Popups are blocked — allow popups to print, or use COPY.');}
+}
+
+/* List scheduled weekly reviews for the active business (cloud first, local fallback) */
+function loadReviews(){
+  var sec=document.getElementById('mtg-reviews-sec'),wrap=document.getElementById('mtg-reviews');
+  if(!wrap)return;
+  function render(list){
+    if(sec)sec.style.display='block';
+    if(!list.length){
+      wrap.innerHTML='<div style="font-size:10px;color:var(--text-muted);letter-spacing:1px;line-height:1.7">'+((sb&&sbUser)
+        ? 'No weekly reviews yet. They generate every Monday 07:00 Lagos for businesses with <span style="color:var(--gold-text)">Auto-run Weekly Review</span> on — or press GENERATE WEEKLY REVIEW above.'
+        : 'Sign in (sidebar → SYNC) to load scheduled reviews. Once signed in they appear here and can be read or printed.')+'</div>';
+      return;
+    }
+    wrap.innerHTML='';
+    list.forEach(function(rec){
+      var d=document.createElement('div');d.className='rev-item';
+      d.innerHTML='<span class="rev-when">◷ '+escHtml((rec.date||'')+' '+(rec.time||''))+'</span>'
+        +'<span class="rev-sum">'+escHtml((rec.summary||rec.task||'Weekly review').slice(0,64))+'</span>'
+        +'<span class="rev-open">READ ▸</span>';
+      d.onclick=function(){var biz=getActiveBiz();renderReviewCard('Weekly Review — '+((biz&&biz.name)||'')+' · '+(rec.date||''),rec.synthesis||'');};
+      wrap.appendChild(d);
+    });
+  }
+  if(sb&&sbUser){
+    sb.from('runs').select('run_id,data,created_at').eq('biz_id',activeBizId).order('created_at',{ascending:false}).then(function(r){
+      var list=(((r&&r.data))||[]).map(function(x){var dd=x.data||{};dd.id=x.run_id;return dd;}).filter(function(dd){return dd.kind==='auto_review';});
+      render(list);
+    }).catch(function(){render([]);});
+  }else{
+    var all={};try{all=JSON.parse(localStorage.getItem('kc_history_v3')||'{}');}catch(e){}
+    render(((all[activeBizId])||[]).filter(function(dd){return dd.kind==='auto_review';}));
+  }
+}
+
+function loadMeetings(){
+  var list=document.getElementById('meetings-list');
+  if(!list)return;
+  if(!activeBizId){list.innerHTML='';return;}
+  var key='kc_meetings_'+activeBizId;
+  var all=JSON.parse(localStorage.getItem(key)||'[]');
+  if(!all.length){list.innerHTML='';return;}
+  list.innerHTML='';
+  all.forEach(function(m){
+    var d=document.createElement('div');d.className='meeting-item';
+    var platform=m.platform||'imported';
+    var date=m.meeting_date||(m.created_at?m.created_at.split('T')[0]:'—');
+    var audioBadge=(m.source_type==='audio')?'<span class="mtg-audio-badge">◉ AUDIO</span>':'';
+    d.innerHTML='<div class="meeting-title">'+escHtml(m.title)+audioBadge+'</div><div class="meeting-meta"><span class="meeting-platform">'+platform+'</span>'+date+' · '+m.transcript.length+' chars</div>';
+    d.onclick=function(){renderMeetingDetail(m)};
+    list.appendChild(d);
+  });
+}
+
+function generateWeeklyReview(bizId){
+  if(!bizId)return Promise.reject(new Error('No business'));
+  var key='kc_meetings_'+bizId;
+  var all=JSON.parse(localStorage.getItem(key)||'[]');
+  var biz=businesses.find(function(b){return b.id===bizId;});
+  if(!all.length||!biz)return Promise.resolve('No meetings for '+biz.name);
+  var thisWeek=all.filter(function(m){var d=new Date(m.created_at||m.meeting_date);var now=new Date();var diff=(now-d)/(1000*60*60*24);return diff<=7;});
+  if(!thisWeek.length)return Promise.resolve('No meetings this week for '+biz.name);
+  var payload=JSON.stringify(thisWeek.map(function(m){return{id:m.id,title:m.title,date:m.date,decisions:m.decisions||[],action_items:m.action_items||[],open_questions:m.open_questions||[],flags:m.flags||[],summary:m.summary||''};}));
+  return callAPI(WEEKLY_REVIEW_SYSTEM,payload,1,MODELS.orchestrator,TOKENS.synthesis).then(function(o){
+    var text=typeof o==='object'?o.text:o;
+    return text;
+  });
+}
+
+</script>
+<!-- Confirmation sheet -->
+<div id="cfm-backdrop">
+  <div id="cfm-box">
+    <div id="cfm-title">Confirm Import</div>
+    <div id="cfm-msg">Replace current businesses and history?</div>
+    <div id="cfm-row">
+      <button class="mbtn mbtn-cancel" onclick="closeConfirm()">CANCEL</button>
+      <button class="mbtn mbtn-save" onclick="doConfirm()">CONFIRM IMPORT</button>
+    </div>
+  </div>
+</div>
+<div id="guide-backdrop" onclick="if(event.target===this)toggleGuide()">
+  <div id="guide-wrap">
+    <button id="guide-close" onclick="toggleGuide()">×</button>
+    <div class="sec-lbl">USER GUIDE</div>
+<div id="guide-view">
+      <div id="guide-dl">
+        <a class="guide-dl-btn" href="./docs/kunoch-command-manual.pdf" target="_blank">↓ FULL MANUAL (PDF)</a>
+        <a class="guide-dl-btn" href="./docs/kunoch-command-how-to.pdf" target="_blank">↓ QUICK HOW-TO (PDF)</a>
+      </div>
+
+      <div class="gsec"><h3>1 · What this is</h3>
+        <p>Kunoch Command is your family-office command center. You issue a directive; <b>Fredrick</b> (Chief of Staff) selects the right specialists from a roster of seven — CFO, Legal, M&amp;A, PPP, Board, Tech, Research — has each analyse it, then writes one decisive executive briefing. Everything is scoped to the specific business you're working in.</p>
+      </div>
+
+      <div class="gsec"><h3>2 · First-time setup</h3>
+        <p>The app works immediately in <b>local mode</b> (paste your Anthropic key in the sidebar API panel). To sync across phone + desktop and enable meetings and auto-reviews, sign in:</p>
+        <ol>
+          <li><b>Set the server key</b> — in Supabase → Project Settings → Edge Functions → Secrets, add <span class="mono">ANTHROPIC_API_KEY</span> = your <span class="mono">sk-ant-…</span> key.</li>
+          <li><b>Allow the login redirect</b> — Supabase → Authentication → URL Configuration → Site URL and Redirect URLs = <span class="mono">https://kelechidozie-claude.github.io/kunoch-command/</span> (add the <span class="mono">/**</span> wildcard too).</li>
+          <li><b>Sign in</b> — sidebar → SYNC panel → your email → SEND MAGIC LINK → click the link. Repeat on your phone with the same email to share one dataset.</li>
+        </ol>
+      </div>
+
+      <div class="gsec"><h3>3 · Issuing a directive</h3>
+        <ol>
+          <li>Pick the active business (top-left switcher).</li>
+          <li>Optionally drop documents (PDF, Word, Excel, images…) for Fredrick to analyse.</li>
+          <li>Choose <b>Scope</b>: <b>Single business</b> or <b>Cross-business</b>.</li>
+          <li>Choose <b>Agent mode</b> (sidebar): <b>AUTO</b> (Fredrick picks the agents) or <b>MANUAL</b> (you tick the agents).</li>
+          <li>Type your directive and press <b>ISSUE</b> (or ⌘/Ctrl + Enter).</li>
+        </ol>
+        <p>Each specialist card shows Fredrick's brief and the analysis; the gold card at the bottom is the executive briefing. Use <b>EXPORT PDF</b> for a letterhead briefing, or <b>COPY</b> on any card.</p>
+      </div>
+
+      <div class="gsec"><h3>4 · Follow-ups</h3>
+        <p>After a run, use <b>CONTINUE THE THREAD</b> under the briefing. Fredrick routes your follow-up to <i>only</i> the relevant specialist(s), builds on the prior conclusions, and stores the exchange inside that run.</p>
+      </div>
+
+      <div class="gsec"><h3>5 · Cross-business directives</h3>
+        <p>Set Scope to <b>Cross-business</b>, tick <b>2+ businesses</b>, and issue. Fredrick briefs the agents on <b>synergies, conflicts, resource contention and sequencing</b> across those businesses. The result is filed under every business involved and badged <span class="gold">◆ N BIZ</span> in history.</p>
+      </div>
+
+      <div class="gsec"><h3>6 · Businesses &amp; profiles</h3>
+        <p>Use <b>+ NEW BUSINESS</b> or <b>⚙ EDIT CURRENT</b>. The profile (positioning, stage, priorities, non-negotiables, brand spec) is injected into every directive for that business, plus the last few decisions as memory. The <b>Scheduled Auto-Review</b> toggle lives here.</p>
+      </div>
+
+      <div class="gsec"><h3>7 · Meetings (MEETINGS tab)</h3>
+        <p>Sign in, then drop a transcript or notes (.vtt/.srt/.txt/Word/PDF/Excel/images). The original is stored securely with a SHA-256 fingerprint and provenance in the audit log; Fredrick normalises it into a structured record (decisions, action items with owner &amp; due, open questions, flags). <b>WEEKLY REVIEW</b> summarises the last 30 days and carries forward open items. <b>Voice audio</b> (mp3/m4a/wav/mp4…) is <b>auto-transcribed with speaker diarisation</b> — set a <span class="mono">DEEPGRAM_API_KEY</span> secret on the server to enable it.</p>
+      </div>
+
+      <div class="gsec"><h3>8 · Scheduled auto-reviews</h3>
+        <p>Tick <b>Scheduled Auto-Review</b> on any business. Every <b>Monday 07:00 Africa/Lagos</b> a weekly portfolio review is generated from that business's profile + recent meetings and filed into its run history automatically. Tick <b>Also email me</b> to have each review delivered to your inbox (needs a <span class="mono">RESEND_API_KEY</span> secret and a verified sender address set on the server). Requires the Anthropic server key. Every review is also always available in the app under <b>MEETINGS → Scheduled Weekly Reviews</b> — click <b>READ</b> to open it, then <b>COPY</b> or <b>Print / Save PDF</b> (so you never depend on email).</p>
+      </div>
+
+      <div class="gsec"><h3>9 · Sync, cost &amp; backup</h3>
+        <p><b>Sync:</b> signed in = data lives in the cloud and every device shares it; signed out = local only. <b>Cost meter</b> (top bar) shows this interaction's spend and month-to-date. <b>Export / Import</b> (sidebar) backs up businesses + history to a JSON file — never your key.</p>
+      </div>
+
+      <div class="gsec"><h3>10 · Troubleshooting</h3>
+        <ul>
+          <li><b>Magic link goes to 127.0.0.1 / localhost</b> — send the link from the live site (not a local copy), delete old link emails, and confirm the Redirect URLs are saved in Supabase.</li>
+          <li><b>"Sign-in rate limit exceeded"</b> — the email sender is throttled; connect your Resend SMTP (Authentication → SMTP) and raise the email rate limit.</li>
+          <li><b>AI call fails when signed in</b> — the <span class="mono">ANTHROPIC_API_KEY</span> secret isn't set in Supabase.</li>
+          <li><b>Rate-limited mid-run</b> — the app retries automatically; wait ~30s and RETRY the card, or raise your Anthropic tier.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="meetings-backdrop" onclick="if(event.target===this)toggleMeetings()">
+  <div id="meetings-panel">
+    <div id="meetings-hdr">
+      <div id="meetings-title">MEETINGS · <span id="meetings-biz">—</span></div>
+      <button onclick="toggleMeetings()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:18px">×</button>
+    </div>
+    <div id="meetings-body">
+      <div id="meetings-upload">
+        <div style="font-size:10px;letter-spacing:2px;color:var(--gold);margin-bottom:8px">UPLOAD TRANSCRIPT</div>
+        <div style="font-size:11px;color:var(--text-dim);margin-bottom:10px">VTT · SRT · DOCX · PDF · TXT · <b>audio</b> (mp3/m4a/wav/mp4 — auto-transcribed, diarised)</div>
+        <input type="file" id="meeting-file" accept=".vtt,.srt,.docx,.pdf,.txt,.mp3,.m4a,.wav,.mp4,.aac,.ogg,.webm,.flac" style="display:none" onchange="handleMeetingUpload(this)" />
+        <button class="bk-btn" onclick="document.getElementById('meeting-file').click()" style="width:100%">SELECT FILE</button>
+        <div id="meetings-parse-status" style="margin-top:8px;font-size:10px;color:var(--text-muted)"></div>
+      </div>
+      <div id="meetings-list"></div>
+      <button id="weekly-review-btn" onclick="runWeeklyReview()" class="bk-btn" style="width:100%;margin-top:12px">GENERATE WEEKLY REVIEW</button>
+      <div id="weekly-review-output" style="margin-top:12px;display:none"></div>
+      <div id="mtg-reviews-sec" style="margin-top:16px">
+        <div style="font-size:10px;letter-spacing:2px;color:var(--gold);margin-bottom:8px">SCHEDULED WEEKLY REVIEWS</div>
+        <div id="mtg-reviews"></div>
+      </div>
+      <div id="mtg-review-card" style="margin-top:12px;display:none"></div>
+    </div>
+  </div>
+</div>
+
+<div id="task-fs"><div id="task-fs-hdr"><span>Directive Editor</span><button onclick="toggleTaskFullscreen()" style="background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:18px">×</button></div><textarea id="task-fs-ta"></textarea></div></body>
+</html>
